@@ -1,0 +1,11 @@
+sqlalchemy==2.0.30
+psycopg2-binary==2.9.9
+celery==5.4.0
+redis==5.0.4
+docker==7.1.0
+reportlab==4.1.0
+pydantic-settings==2.2.1
+# --- used by the test-suite
+pytest==8.2.0
+fakeredis==2.23.2
+pdfplumber==0.11.0

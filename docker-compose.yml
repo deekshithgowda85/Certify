@@ -1,0 +1,82 @@
+name: bulk-certificate-generator
+
+services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-certificates_db}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-certificates_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build:
+      # Build context is the repo root so the image can also bake in ./alembic
+      context: .
+      dockerfile: api/Dockerfile
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    env_file: .env
+    volumes:
+      - ./api/app:/app/app
+      - ./alembic:/app/alembic
+      - ./tests:/app/tests
+      - certificate_storage:/app/storage/certificates
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  dispatcher:
+    build:
+      context: ./dispatcher
+      dockerfile: Dockerfile
+    command: celery -A app.celery_app worker --loglevel=info --pool=threads --concurrency=5 -Q certificates
+    env_file: .env
+    volumes:
+      - ./dispatcher/app:/app/app
+      - ./tests:/app/tests
+      - certificate_storage:/app/storage/certificates
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      pdf-generator:
+        # guarantees the sandbox image exists before the dispatcher starts
+        condition: service_completed_successfully
+
+  pdf-generator:
+    # Image only: spawned on demand by the dispatcher, never a long-running service.
+    build:
+      context: ./pdf_generator
+      dockerfile: Dockerfile
+    image: bulk-certificate-generator-pdf-generator:latest
+    command: ["echo", "This image is spawned on-demand. Not a running service."]
+    restart: "no"
+
+volumes:
+  postgres_data:
+  certificate_storage:
+    name: bulk-certificate-generator_certificate_storage

@@ -1,0 +1,37 @@
+"""Application settings (pydantic-settings, configured via environment variables)."""
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    DATABASE_URL: str = "postgresql://postgres:postgres@db:5432/certificates_db"
+    REDIS_URL: str = "redis://redis:6379/0"
+    CELERY_BROKER_URL: str = "redis://redis:6379/0"
+    CELERY_RESULT_BACKEND: str = "redis://redis:6379/1"
+    CELERY_TASK_ALWAYS_EAGER: bool = False
+
+    STORAGE_PATH: str = "/app/storage/certificates"
+
+    SANDBOX_THRESHOLD: int = 10
+
+    APP_VERSION: str = "1.0.0"
+    DEBUG: bool = False
+    TESTING: bool = False
+    RUN_MIGRATIONS: bool = True
+    MAX_RECIPIENTS_PER_JOB: int = 10000
+
+    # Name of the Celery task implemented by the dispatcher service.
+    CERTIFICATE_TASK_NAME: str = "app.tasks.certificate_task.certificate_task"
+    CELERY_QUEUE: str = "certificates"
+
+    @property
+    def async_database_url(self) -> str:
+        url = self.DATABASE_URL
+        for prefix in ("postgresql+asyncpg://", "postgresql+psycopg2://", "postgresql://", "postgres://"):
+            if url.startswith(prefix):
+                return "postgresql+asyncpg://" + url[len(prefix):]
+        return url
+
+
+settings = Settings()
