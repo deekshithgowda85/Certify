@@ -3,10 +3,13 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+import hashlib
+import json
 from pathlib import Path
 from typing import Any, Optional
 
 from sqlalchemy import func, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.celery_app import celery_app
@@ -21,13 +24,18 @@ class NoValidRecipientsError(Exception):
         self.errors = errors
 
 
+class IdempotencyConflictError(Exception):
+    pass
+
+
 @dataclass
 class CreatedJob:
     job_id: uuid.UUID
-    recipient_id: uuid.UUID
     total: int
     valid: int
     invalid: int
+    replayed: bool = False
+    enqueue_error: Optional[str] = None
 
 
 def enqueue_certificate_task(job_id: str) -> None:
@@ -46,12 +54,57 @@ def parse_uuid(value: str) -> Optional[uuid.UUID]:
         return None
 
 
+def request_fingerprint(title: str, raw_recipients: list[Any]) -> str:
+    canonical = json.dumps(
+        {"title": title, "recipients": raw_recipients},
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+async def _replayed_job(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    idempotency_key: str,
+    fingerprint: str,
+) -> Optional[CreatedJob]:
+    job = await session.scalar(
+        select(Job).where(
+            Job.user_id == user_id,
+            Job.idempotency_key == idempotency_key,
+        )
+    )
+    if job is None:
+        return None
+    if job.request_fingerprint != fingerprint:
+        raise IdempotencyConflictError("Idempotency-Key was already used with a different request")
+    return CreatedJob(
+        job_id=job.id,
+        total=job.total_recipients,
+        valid=job.valid_recipients,
+        invalid=job.invalid_recipients,
+        replayed=True,
+        enqueue_error=job.enqueue_error,
+    )
+
+
 async def create_job(
     session: AsyncSession,
     title: str,
-    raw_recipients: list[dict[str, Any]],
+    raw_recipients: list[Any],
     user_id: uuid.UUID,
+    idempotency_key: Optional[str] = None,
+    fingerprint: Optional[str] = None,
 ) -> CreatedJob:
+    if idempotency_key is not None:
+        if fingerprint is None:
+            raise ValueError("fingerprint is required when an idempotency key is provided")
+        replay = await _replayed_job(session, user_id, idempotency_key, fingerprint)
+        if replay is not None:
+            return replay
+
     job_id = uuid.uuid4()
     rows: list[Recipient] = []
     errors: list[dict[str, Any]] = []
@@ -95,11 +148,24 @@ async def create_job(
         processed_count=invalid,
         success_count=0,
         failed_count=invalid,
+        valid_recipients=valid,
+        invalid_recipients=invalid,
+        idempotency_key=idempotency_key,
+        request_fingerprint=fingerprint,
     )
     session.add(job)
     session.add_all(rows)
-    await session.commit()
-    return CreatedJob(job_id=job_id, recipient_id=rows[0].id, total=len(rows), valid=valid, invalid=invalid)
+    try:
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        if idempotency_key is None:
+            raise
+        replay = await _replayed_job(session, user_id, idempotency_key, fingerprint)
+        if replay is None:
+            raise
+        return replay
+    return CreatedJob(job_id=job_id, total=len(rows), valid=valid, invalid=invalid)
 
 
 async def mark_job_failed(session: AsyncSession, job_id: uuid.UUID, message: str) -> None:
@@ -122,6 +188,7 @@ async def mark_job_failed(session: AsyncSession, job_id: uuid.UUID, message: str
             status=JobStatus.FAILED.value,
             failed_count=Job.failed_count + pending,
             processed_count=Job.processed_count + pending,
+            enqueue_error=message[:1000],
         )
     )
     await session.commit()
@@ -132,6 +199,32 @@ async def get_job(session: AsyncSession, job_id: str, user_id: uuid.UUID) -> Opt
     if parsed is None:
         return None
     return await session.scalar(select(Job).where(Job.id == parsed, Job.user_id == user_id))
+
+
+async def list_jobs(session: AsyncSession, user_id: uuid.UUID) -> list[tuple[Job, Optional[uuid.UUID]]]:
+    jobs = list(
+        (
+            await session.execute(
+                select(Job).where(Job.user_id == user_id).order_by(Job.created_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not jobs:
+        return []
+
+    recipient_rows = (
+        await session.execute(
+            select(Recipient.job_id, Recipient.id)
+            .where(Recipient.job_id.in_([job.id for job in jobs]))
+            .order_by(Recipient.created_at, Recipient.id)
+        )
+    ).all()
+    recipient_ids: dict[uuid.UUID, uuid.UUID] = {}
+    for job_id, recipient_id in recipient_rows:
+        recipient_ids.setdefault(job_id, recipient_id)
+    return [(job, recipient_ids.get(job.id)) for job in jobs]
 
 
 async def list_recipients(
@@ -186,8 +279,9 @@ def resolve_certificate_path(relative_path: Optional[str]) -> Optional[Path]:
     """Map a stored (storage-root relative) path to a file, refusing anything outside the root."""
     if not relative_path:
         return None
-    root = Path(settings.STORAGE_PATH).resolve()
-    candidate = (root / relative_path).resolve()
-    if not candidate.is_relative_to(root) or not candidate.is_file():
+    try:
+        root = Path(settings.STORAGE_PATH).resolve()
+        candidate = (root / relative_path).resolve()
+    except (OSError, RuntimeError, ValueError):
         return None
-    return candidate
+    return candidate if candidate.is_relative_to(root) and candidate.is_file() else None

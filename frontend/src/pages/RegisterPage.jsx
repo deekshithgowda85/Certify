@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import toast from 'react-hot-toast'
 import { register } from '../api/auth'
+import { getApiErrorMessage } from '../api/errors'
 import { useAuthStore } from '../store/authStore'
 import AuthQuickLinks from '../components/AuthQuickLinks'
 
@@ -43,7 +44,11 @@ export default function RegisterPage() {
   const submit = async (e) => {
     e.preventDefault()
     const v = validate()
-    if (Object.keys(v).length) { setErrs(v); return }
+    if (Object.keys(v).length) {
+      setErrs(v)
+      toast.error('Please correct the highlighted sign-up fields.')
+      return
+    }
     setBusy(true); setErrs({})
     try {
       const res = await register({ full_name: form.full_name, email: form.email, password: form.password })
@@ -51,7 +56,9 @@ export default function RegisterPage() {
       toast.success('Account created! Welcome 🎉')
       navigate('/dashboard/certificates', { replace: true })
     } catch (e) {
-      setErrs({ api: e.response?.data?.detail || 'Registration failed. Try again.' })
+      const message = getApiErrorMessage(e, 'Registration failed. Try again.')
+      setErrs({ api: message })
+      toast.error(message)
     } finally { setBusy(false) }
   }
 

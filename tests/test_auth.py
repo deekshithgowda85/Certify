@@ -45,4 +45,4 @@ async def test_jobs_are_scoped_to_current_user(client, anonymous_client, create_
     )).json()["access_token"]
     anonymous_client.headers["Authorization"] = f"Bearer {token}"
     assert (await anonymous_client.get("/api/v1/jobs")).json()["jobs"] == []
-    assert (await anonymous_client.get(f"/api/v1/jobs/{job_id}")).status_code == 403
+    assert (await anonymous_client.get(f"/api/v1/jobs/{job_id}")).status_code == 404

@@ -1,6 +1,16 @@
 import api from './axios'
 
-export const createJob = (d) => api.post('/api/v1/jobs', d)
+function newIdempotencyKey() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID()
+  if (globalThis.crypto?.getRandomValues) {
+    return `${Date.now()}-${globalThis.crypto.getRandomValues(new Uint32Array(2)).join('-')}`
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
+export const createJob = (d) => api.post('/api/v1/jobs', d, {
+  headers: { 'Idempotency-Key': newIdempotencyKey() },
+})
 export const getJob    = (id) => api.get(`/api/v1/jobs/${id}`)
 export const getJobs   = ()  => api.get('/api/v1/jobs')
 

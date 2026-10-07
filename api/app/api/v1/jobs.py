@@ -1,27 +1,30 @@
+import logging
 import os
 import re
 import tempfile
-import zipfile
 import uuid
+import zipfile
 from pathlib import Path
 from typing import Annotated, Literal, Optional
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 from starlette.background import BackgroundTask
 
-from app.database import get_session
 from app.auth import get_current_user
-from app.models import Job, Recipient, RecipientStatus, User
-from app.schemas.job import JobCreateRequest, JobCreateResponse, JobListResponse, JobResponse
+from app.database import get_session
+from app.models import Job, RecipientStatus, User
+from app.schemas.job import JobCreateRequest, JobCreateResponse, JobListItem, JobListResponse, JobResponse
 from app.schemas.recipient import RecipientListResponse, RecipientOut
 from app.services import job_service
+from app.services import rate_limit
+from app.config import settings
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
+logger = logging.getLogger("certificate_api")
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
 _UNSAFE_FILENAME = re.compile(r'[\\/:*?"<>|\r\n\t\x00]+')
@@ -39,20 +42,14 @@ def content_disposition(filename: str) -> str:
 
 
 async def _job_or_404(session: AsyncSession, job_id: str, current_user: User) -> Job:
-    parsed_job_id = job_service.parse_uuid(job_id)
-    if parsed_job_id is None:
-        raise HTTPException(status_code=404, detail="Job not found")
-    unowned_job = await session.get(Job, parsed_job_id)
-    if unowned_job is not None and unowned_job.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="You do not have access to this job")
     job = await job_service.get_job(session, job_id, current_user.id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
     return job
 
 
-def _job_response(job: Job, recipient_id: Optional[uuid.UUID] = None) -> JobResponse:
-    return JobResponse(
+def _job_response(job: Job, recipient_id: Optional[uuid.UUID] = None) -> JobListItem:
+    return JobListItem(
         job_id=job.id,
         title=job.title,
         status=job.status,
@@ -68,71 +65,117 @@ def _job_response(job: Job, recipient_id: Optional[uuid.UUID] = None) -> JobResp
     )
 
 
-@router.post("", response_model=JobCreateResponse, status_code=202)
+@router.post(
+    "",
+    response_model=JobCreateResponse,
+    status_code=202,
+    summary="Create a bulk certificate job",
+    responses={
+        202: {"description": "Job accepted", "model": JobCreateResponse},
+        422: {
+            "description": "Invalid request or no valid recipients",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "no_valid_recipients": {
+                            "summary": "All recipients failed validation",
+                            "value": {"detail": [{"index": 0, "error": "email: value is not a valid email address"}]},
+                        }
+                    }
+                }
+            },
+        },
+        409: {"description": "Idempotency key reused with a different request", "content": {"application/json": {"example": {"detail": "Idempotency-Key was already used with a different request"}}}},
+        429: {"description": "The user's job creation limit was exceeded", "content": {"application/json": {"example": {"detail": "Too many requests. Try again in 30 seconds."}}}},
+        503: {"description": "The job was saved but could not be enqueued", "content": {"application/json": {"example": {"detail": "Could not enqueue job; please retry later"}}}},
+    },
+)
 async def create_job(
     payload: JobCreateRequest,
     current_user: CurrentUser,
+    idempotency_key: Annotated[Optional[str], Header(alias="Idempotency-Key", min_length=1, max_length=255)] = None,
     session: AsyncSession = Depends(get_session),
 ):
+    if idempotency_key is not None:
+        idempotency_key = idempotency_key.strip()
+        if not idempotency_key:
+            raise HTTPException(status_code=422, detail="Idempotency-Key must not be blank")
+    await rate_limit.enforce_rate_limit(
+        "jobs:create", str(current_user.id), settings.JOB_RATE_LIMIT_PER_MINUTE
+    )
     try:
-        created = await job_service.create_job(session, payload.title, payload.recipients, current_user.id)
+        created = await job_service.create_job(
+            session,
+            payload.title,
+            payload.recipients,
+            current_user.id,
+            idempotency_key,
+            job_service.request_fingerprint(payload.title, payload.recipients),
+        )
     except job_service.NoValidRecipientsError as exc:
         raise HTTPException(
             status_code=422,
-            detail={
-                "message": "No valid recipients in request",
-                "errors": exc.errors[:50],
-            },
+            detail=exc.errors,
         )
+    except job_service.IdempotencyConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
-    try:
-        await run_in_threadpool(job_service.enqueue_certificate_task, str(created.job_id))
-    except Exception as exc:  # broker unreachable etc.
-        await job_service.mark_job_failed(session, created.job_id, f"Could not enqueue job: {exc}")
-        raise HTTPException(status_code=503, detail="Could not enqueue job; please retry later")
+    if created.replayed:
+        if created.enqueue_error:
+            raise HTTPException(status_code=503, detail="Could not enqueue job; please retry later")
+    else:
+        try:
+            await run_in_threadpool(job_service.enqueue_certificate_task, str(created.job_id))
+        except Exception as exc:  # broker unreachable etc.
+            logger.exception("Could not enqueue certificate job %s", created.job_id)
+            await job_service.mark_job_failed(session, created.job_id, f"Could not enqueue job: {exc}")
+            raise HTTPException(status_code=503, detail="Could not enqueue job; please retry later")
 
     return JobCreateResponse(
         job_id=created.job_id,
-        recipient_id=created.recipient_id,
         status="PENDING",
         total_recipients=created.total,
         valid_recipients=created.valid,
         invalid_recipients=created.invalid,
-        processing_mode=None,
     )
 
 
-@router.get("", response_model=JobListResponse)
+@router.get(
+    "",
+    response_model=JobListResponse,
+    summary="List the current user's certificate jobs",
+)
 async def list_jobs(current_user: CurrentUser, session: AsyncSession = Depends(get_session)) -> JobListResponse:
-    jobs = list(
-        (
-            await session.execute(
-                select(Job).where(Job.user_id == current_user.id).order_by(Job.created_at.desc())
-            )
-        )
-        .scalars()
-        .all()
-    )
-    if not jobs:
-        return JobListResponse(jobs=[])
-    recipient_rows = (
-        await session.execute(
-            select(Recipient.job_id, Recipient.id)
-            .where(Recipient.job_id.in_([job.id for job in jobs]))
-            .order_by(Recipient.created_at, Recipient.id)
-        )
-    ).all()
-    recipient_ids = {job_id: recipient_id for job_id, recipient_id in reversed(recipient_rows)}
-    return JobListResponse(jobs=[_job_response(job, recipient_ids.get(job.id)) for job in jobs])
+    jobs = await job_service.list_jobs(session, current_user.id)
+    return JobListResponse(jobs=[_job_response(job, recipient_id) for job, recipient_id in jobs])
 
 
-@router.get("/{job_id}", response_model=JobResponse)
-async def get_job(job_id: str, current_user: CurrentUser, session: AsyncSession = Depends(get_session)):
+@router.get(
+    "/{job_id}",
+    response_model=JobResponse,
+    summary="Get job status and progress",
+    responses={
+        404: {"description": "Job not found", "content": {"application/json": {"example": {"detail": "Job not found"}}}},
+    },
+)
+async def get_job(
+    job_id: str,
+    current_user: CurrentUser,
+    session: AsyncSession = Depends(get_session),
+):
     job = await _job_or_404(session, job_id, current_user)
     return _job_response(job)
 
 
-@router.get("/{job_id}/recipients", response_model=RecipientListResponse)
+@router.get(
+    "/{job_id}/recipients",
+    response_model=RecipientListResponse,
+    summary="List recipient processing results",
+    responses={
+        404: {"description": "Job not found", "content": {"application/json": {"example": {"detail": "Job not found"}}}},
+        422: {"description": "Invalid pagination or status filter", "content": {"application/json": {"example": {"detail": "Input should be 'PENDING', 'SUCCESS' or 'FAILED'"}}}},
+    },
+)
 async def list_recipients(
     job_id: str,
     current_user: CurrentUser,
@@ -162,7 +205,18 @@ async def list_recipients(
 
 
 # NOTE: must be declared before the "{recipient_id}" route so "download-all" is not captured by it.
-@router.get("/{job_id}/certificates/download-all")
+@router.get(
+    "/{job_id}/certificates/download-all",
+    response_class=FileResponse,
+    summary="Download all successful certificates as a ZIP",
+    responses={
+        200: {
+            "description": "ZIP archive of successful certificate PDFs",
+            "content": {"application/zip": {"example": "PK binary ZIP archive"}},
+        },
+        404: {"description": "Job not found or no certificates are available", "content": {"application/json": {"example": {"detail": "No certificates available for this job"}}}},
+    },
+)
 async def download_all(job_id: str, current_user: CurrentUser, session: AsyncSession = Depends(get_session)):
     job = await _job_or_404(session, job_id, current_user)
     recipients = await job_service.list_successful_recipients(session, job)
@@ -171,7 +225,7 @@ async def download_all(job_id: str, current_user: CurrentUser, session: AsyncSes
     for recipient in recipients:
         path = job_service.resolve_certificate_path(recipient.certificate_path)
         if path is not None:
-            arcname = f"{safe_filename(recipient.name)}_{str(recipient.id)[:8]}.pdf"
+            arcname = f"{safe_filename(recipient.name)}_{recipient.id}.pdf"
             entries.append((path, arcname))
     if not entries:
         raise HTTPException(status_code=404, detail="No certificates available for this job")
@@ -199,7 +253,18 @@ def _build_zip(target: str, entries: list[tuple[Path, str]]) -> None:
             archive.write(path, arcname=arcname)
 
 
-@router.get("/{job_id}/certificates/{recipient_id}")
+@router.get(
+    "/{job_id}/certificates/{recipient_id}",
+    response_class=FileResponse,
+    summary="Download a successful recipient certificate",
+    responses={
+        200: {
+            "description": "PDF certificate attachment",
+            "content": {"application/pdf": {"example": "%PDF-1.4 binary PDF"}},
+        },
+        404: {"description": "Job, recipient, or PDF not found", "content": {"application/json": {"example": {"detail": "Certificate not available"}}}},
+    },
+)
 async def download_certificate(
     job_id: str,
     recipient_id: str,

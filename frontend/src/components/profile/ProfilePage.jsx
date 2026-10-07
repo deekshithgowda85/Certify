@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
+import { getApiErrorMessage } from '../../api/errors'
 import { format } from 'date-fns'
 import { getMe, updateMe } from '../../api/auth'
 import { getJobs } from '../../api/certificates'
@@ -49,7 +50,7 @@ export default function ProfilePage() {
       toast.success('Name updated!')
       setEditing(false)
     },
-    onError: () => toast.error('Update failed'),
+    onError: (error) => toast.error(getApiErrorMessage(error, 'Update failed')),
   })
 
   const startEdit = () => {

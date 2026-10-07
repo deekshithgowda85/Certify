@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,15 +20,28 @@ from app.schemas.auth import (
     UserResponse,
     UserUpdate,
 )
+from app.services import rate_limit
+from app.config import settings
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
-@router.post("/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
-async def register(payload: UserCreate, session: SessionDep) -> AuthResponse:
+@router.post(
+    "/register",
+    response_model=AuthResponse,
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        429: {"description": "Registration limit exceeded", "content": {"application/json": {"example": {"detail": "Too many requests. Try again in 30 seconds."}}}},
+        503: {"description": "Rate-limit storage is unavailable"},
+    },
+)
+async def register(payload: UserCreate, request: Request, session: SessionDep) -> AuthResponse:
     """Create a user and return an access token."""
+    await rate_limit.enforce_rate_limit(
+        "auth:register", rate_limit.client_ip(request), settings.AUTH_RATE_LIMIT_PER_MINUTE
+    )
     email = str(payload.email).lower()
     existing = await session.scalar(select(User).where(User.email == email))
     if existing is not None:
@@ -45,9 +58,19 @@ async def register(payload: UserCreate, session: SessionDep) -> AuthResponse:
     return AuthResponse(access_token=create_access_token(user.id), user=user)
 
 
-@router.post("/login", response_model=AuthResponse)
-async def login(payload: LoginRequest, session: SessionDep) -> AuthResponse:
+@router.post(
+    "/login",
+    response_model=AuthResponse,
+    responses={
+        429: {"description": "Login limit exceeded", "content": {"application/json": {"example": {"detail": "Too many requests. Try again in 30 seconds."}}}},
+        503: {"description": "Rate-limit storage is unavailable"},
+    },
+)
+async def login(payload: LoginRequest, request: Request, session: SessionDep) -> AuthResponse:
     """Verify credentials and return an access token."""
+    await rate_limit.enforce_rate_limit(
+        "auth:login", rate_limit.client_ip(request), settings.AUTH_RATE_LIMIT_PER_MINUTE
+    )
     email = str(payload.email).lower()
     user = await session.scalar(select(User).where(User.email == email))
     if user is None or not verify_password(payload.password, user.password_hash):

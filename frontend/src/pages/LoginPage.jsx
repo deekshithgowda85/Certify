@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import toast from 'react-hot-toast'
 import { login } from '../api/auth'
+import { getApiErrorMessage } from '../api/errors'
 import { useAuthStore } from '../store/authStore'
 import AuthQuickLinks from '../components/AuthQuickLinks'
 
@@ -24,10 +25,7 @@ export default function LoginPage() {
       toast.success('Welcome back!')
       navigate('/dashboard/certificates', { replace: true })
     } catch (e) {
-      const detail = e.response?.data?.detail
-      const message = typeof detail === 'string'
-        ? detail
-        : 'Unable to sign in. Check your email and password and try again.'
+      const message = getApiErrorMessage(e, 'Unable to sign in. Check your email and password and try again.')
       setErr(message)
       toast.error(message)
     } finally { setBusy(false) }

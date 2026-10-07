@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useQuery } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
+import { getApiErrorMessage } from '../../api/errors'
 import { createJob, getJobs } from '../../api/certificates'
 import { useAuthStore } from '../../store/authStore'
 import CourseCard from './CourseCard'
@@ -9,22 +10,6 @@ import CertificateCard from './CertificateCard'
 import GenerateAnimation from './GenerateAnimation'
 import ManualCertificateForm from './ManualCertificateForm'
 import { format } from 'date-fns'
-
-function requestErrorMessage(error, fallback) {
-  const detail = error.response?.data?.detail
-  if (typeof detail === 'string') return detail
-  if (Array.isArray(detail)) {
-    const messages = detail.map(item => item.msg).filter(Boolean)
-    return messages.length ? messages.join('; ') : fallback
-  }
-  if (detail && typeof detail === 'object') {
-    const recipientErrors = Array.isArray(detail.errors)
-      ? detail.errors.map(item => item.error).filter(Boolean)
-      : []
-    return [detail.message, ...recipientErrors].filter(Boolean).join(': ') || fallback
-  }
-  return error.message || fallback
-}
 
 const COURSES = [
   { id: 1, name: 'Python Bootcamp',         icon: '/Python.svg',       duration: '8 weeks'  },
@@ -45,6 +30,20 @@ export default function CertificatesPage() {
   const [busyCourse,       setBusyCourse]       = useState(null)
   const [manualOpen,       setManualOpen]       = useState(false)
   const [manualBusy,       setManualBusy]       = useState(false)
+  const [generationLocked, setGenerationLocked] = useState(false)
+  const generationLockRef = useRef(false)
+
+  const acquireGenerationLock = () => {
+    if (generationLockRef.current) return false
+    generationLockRef.current = true
+    setGenerationLocked(true)
+    return true
+  }
+
+  const releaseGenerationLock = () => {
+    generationLockRef.current = false
+    setGenerationLocked(false)
+  }
 
   const { data: jobsData, refetch } = useQuery({
     queryKey: ['jobs'],
@@ -62,7 +61,7 @@ export default function CertificatesPage() {
   )
 
   const handleGenerate = async (course) => {
-    if (!user) return
+    if (!user || !acquireGenerationLock()) return
     setBusyCourse(course.id)
     try {
       const today = format(new Date(), 'yyyy-MM-dd')
@@ -77,13 +76,15 @@ export default function CertificatesPage() {
         }],
       })
       const jobId = res.data.job_id
+      toast.success('Certificate request queued.')
       // grab recipient id from the first recipient (API should return it)
       const recipientId = res.data.recipient_id ?? null
       setActiveJobId(jobId)
       setActiveRecipientId(recipientId)
     } catch (e) {
-      toast.error(requestErrorMessage(e, 'Failed to start job'))
+      toast.error(getApiErrorMessage(e, 'Failed to start job'))
       setBusyCourse(null)
+      releaseGenerationLock()
     }
   }
 
@@ -91,11 +92,14 @@ export default function CertificatesPage() {
     setActiveJobId(null)
     setActiveRecipientId(null)
     setBusyCourse(null)
+    releaseGenerationLock()
     refetch()
   }
 
   const handleManualSubmit = async (form) => {
+    if (!acquireGenerationLock()) return
     setManualBusy(true)
+    let jobStarted = false
     try {
       const res = await createJob({
         title: form.title,
@@ -110,10 +114,13 @@ export default function CertificatesPage() {
       setManualOpen(false)
       setActiveJobId(res.data.job_id)
       setActiveRecipientId(res.data.recipient_id ?? null)
+      toast.success('Certificate request queued.')
+      jobStarted = true
     } catch (error) {
-      toast.error(requestErrorMessage(error, 'Could not add certificate job'))
+      toast.error(getApiErrorMessage(error, 'Could not add certificate job'))
     } finally {
       setManualBusy(false)
+      if (!jobStarted) releaseGenerationLock()
     }
   }
 
@@ -135,7 +142,7 @@ export default function CertificatesPage() {
           <h2 className="font-display font-bold text-2xl text-white mb-1">Certificates</h2>
           <p className="text-slate-400 text-sm">Choose a course or add a fully custom certificate job.</p>
         </div>
-        <button type="button" onClick={() => setManualOpen(true)} className="btn-primary px-4 py-2.5 text-sm whitespace-nowrap">
+        <button type="button" onClick={() => setManualOpen(true)} disabled={generationLocked} className="btn-primary px-4 py-2.5 text-sm whitespace-nowrap disabled:opacity-50">
           + New certificate
         </button>
       </div>
@@ -153,6 +160,7 @@ export default function CertificatesPage() {
                 course={course}
                 certified={certifiedCourses.has(course.name)}
                 busy={busyCourse === course.id}
+                disabled={generationLocked}
                 onGenerate={handleGenerate} />
             </motion.div>
           ))}
@@ -189,7 +197,9 @@ export default function CertificatesPage() {
           <ManualCertificateForm
             user={user}
             busy={manualBusy}
-            onClose={() => setManualOpen(false)}
+            onClose={() => {
+              if (!generationLockRef.current) setManualOpen(false)
+            }}
             onSubmit={handleManualSubmit} />
         )}
       </AnimatePresence>

@@ -1,8 +1,9 @@
 import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { Toaster } from 'react-hot-toast'
+import { QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import toast, { Toaster } from 'react-hot-toast'
 import { useAuthStore } from './store/authStore'
+import { getApiErrorMessage } from './api/errors'
 import ProtectedRoute from './components/ProtectedRoute'
 import LoginPage      from './pages/LoginPage'
 import RegisterPage   from './pages/RegisterPage'
@@ -12,7 +13,14 @@ import CertificatesPage from './components/certificates/CertificatesPage'
 import MetricsPage     from './pages/MetricsPage'
 
 const qc = new QueryClient({
-  defaultOptions: { queries: { retry: 1, staleTime: 30_000 } }
+  queryCache: new QueryCache({
+    onError: (error) => {
+      if (error.response?.status !== 401) {
+        toast.error(getApiErrorMessage(error, 'Could not load the requested data.'))
+      }
+    },
+  }),
+  defaultOptions: { queries: { retry: false, staleTime: 30_000 } },
 })
 
 function AppInit({ children }) {
@@ -47,7 +55,8 @@ export default function App() {
       </BrowserRouter>
 
       <Toaster
-        position="top-right"
+        position="bottom-center"
+        containerStyle={{ bottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }}
         toastOptions={{
           style: {
             background: '#ffffff',

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import uuid
+import re
 from datetime import date, datetime
 from typing import Any, Literal, Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -16,7 +17,7 @@ class RecipientValidated(BaseModel):
     """Strict validation rules applied to every recipient of a POST /jobs request."""
 
     name: str = Field(min_length=1, max_length=255)
-    email: EmailStr
+    email: EmailStr = Field(max_length=255)
     course_name: str = Field(min_length=1, max_length=255)
     client_timezone: str = "UTC"
     completion_date: date
@@ -25,6 +26,15 @@ class RecipientValidated(BaseModel):
     @classmethod
     def _strip(cls, value: Any) -> Any:
         return value.strip() if isinstance(value, str) else value
+
+    @field_validator("completion_date", mode="before")
+    @classmethod
+    def _iso_date(cls, value: Any) -> Any:
+        if type(value) is date:
+            return value
+        if not isinstance(value, str) or re.fullmatch(r"\d{4}-\d{2}-\d{2}", value) is None:
+            raise ValueError("completion_date must be an ISO date in YYYY-MM-DD format")
+        return value
 
     @field_validator("client_timezone")
     @classmethod
@@ -45,14 +55,28 @@ class RecipientValidated(BaseModel):
 
 
 class RecipientOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
     id: uuid.UUID
     name: str
     email: str
     status: Literal["PENDING", "SUCCESS", "FAILED"]
     error_message: Optional[str] = None
     certificate_url: Optional[str] = None
+
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra={
+            "examples": [
+                {
+                    "id": "8f951b0d-7222-47ac-8cc7-d477c88a88f3",
+                    "name": "Ada Lovelace",
+                    "email": "ada@example.com",
+                    "status": "SUCCESS",
+                    "error_message": None,
+                    "certificate_url": "/api/v1/jobs/d9a22120-8fdb-48c9-9ea7-725393f4d3b2/certificates/8f951b0d-7222-47ac-8cc7-d477c88a88f3",
+                }
+            ]
+        },
+    )
 
 
 class RecipientListResponse(BaseModel):
@@ -61,6 +85,29 @@ class RecipientListResponse(BaseModel):
     page: int
     size: int
     recipients: list[RecipientOut]
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "job_id": "d9a22120-8fdb-48c9-9ea7-725393f4d3b2",
+                    "total": 25,
+                    "page": 1,
+                    "size": 10,
+                    "recipients": [
+                        {
+                            "id": "8f951b0d-7222-47ac-8cc7-d477c88a88f3",
+                            "name": "Ada Lovelace",
+                            "email": "ada@example.com",
+                            "status": "SUCCESS",
+                            "error_message": None,
+                            "certificate_url": "/api/v1/jobs/d9a22120-8fdb-48c9-9ea7-725393f4d3b2/certificates/8f951b0d-7222-47ac-8cc7-d477c88a88f3",
+                        }
+                    ],
+                }
+            ]
+        }
+    )
 
 
 def format_validation_error(exc: ValidationError) -> str:

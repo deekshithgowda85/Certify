@@ -100,11 +100,25 @@ if HAS_API:
         monkeypatch.setattr(job_service, "enqueue_certificate_task", mock)
         return mock
 
+    @pytest.fixture(autouse=True)
+    def rate_limit_mock(monkeypatch):
+        """Keep ordinary API tests independent of Redis while exercising the real routes."""
+        from app.services import rate_limit
+
+        class UnlimitedRedis:
+            async def eval(self, script, number_of_keys, key, window):
+                return [1, window]
+
+            async def aclose(self):
+                return None
+
+        monkeypatch.setattr(rate_limit, "redis_client", UnlimitedRedis())
+
     @pytest_asyncio.fixture
     async def client():
         from app.main import app
 
-        transport = httpx.ASGITransport(app=app)
+        transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as http_client:
             response = await http_client.post(
                 "/api/v1/auth/register",
@@ -121,7 +135,7 @@ if HAS_API:
     async def anonymous_client():
         from app.main import app
 
-        transport = httpx.ASGITransport(app=app)
+        transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as http_client:
             yield http_client
 

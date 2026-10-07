@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useJobPolling } from '../../hooks/useJobPolling'
 import { downloadCertificate } from '../../api/certificates'
@@ -88,15 +88,28 @@ export default function GenerateAnimation({ jobId, recipientId, onClose }) {
   const { job, error } = useJobPolling(jobId)
   const user = useAuthStore(s => s.user)
   const [downloading, setDownloading] = useState(false)
+  const notifiedTerminalStatus = useRef(null)
 
   const pct = job
     ? Math.round((job.processed_count / Math.max(job.total_recipients, 1)) * 100)
     : 0
 
-  const status = job?.status ?? (error ? 'FAILED' : 'PENDING')
+  const status = job?.status ?? (error?.response?.status === 404 ? 'FAILED' : 'PENDING')
   const mode = job?.processing_mode ?? 'INLINE'
   const done   = ['COMPLETED', 'PARTIALLY_FAILED', 'FAILED'].includes(status)
   const ok     = status === 'COMPLETED' || status === 'PARTIALLY_FAILED'
+
+  useEffect(() => {
+    if (!done || !job || notifiedTerminalStatus.current === status) return
+    notifiedTerminalStatus.current = status
+    if (status === 'COMPLETED') {
+      toast.success('Certificate generated successfully.')
+    } else if (status === 'PARTIALLY_FAILED') {
+      toast(`Certificate job finished with ${job.failed_count} failed recipient(s).`, { icon: '⚠️' })
+    } else {
+      toast.error('Certificate generation failed.')
+    }
+  }, [done, job, status])
 
   const handleDownload = async () => {
     setDownloading(true)

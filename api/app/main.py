@@ -5,12 +5,15 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api.v1.router import api_router
 from app.config import settings
 from app.database import engine
+from app.services.rate_limit import close_rate_limit_client
 
 logger = logging.getLogger("certificate_api")
 
@@ -46,8 +49,13 @@ async def lifespan(app: FastAPI):
     Path(settings.STORAGE_PATH).mkdir(parents=True, exist_ok=True)
     if settings.RUN_MIGRATIONS:
         await run_migrations()
-    yield
-    await engine.dispose()
+    try:
+        yield
+    finally:
+        try:
+            await close_rate_limit_client()
+        finally:
+            await engine.dispose()
 
 
 app = FastAPI(
@@ -55,11 +63,36 @@ app = FastAPI(
     version=settings.APP_VERSION,
     lifespan=lifespan,
 )
+
+
+@app.exception_handler(RequestValidationError)
+async def request_validation_error_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    errors = [
+        {
+            "loc": list(error.get("loc", ())),
+            "msg": str(error.get("msg", "Invalid request")),
+            "type": str(error.get("type", "value_error")),
+        }
+        for error in exc.errors()
+    ]
+    return JSONResponse(status_code=422, content={"detail": errors})
+
+
+@app.exception_handler(Exception)
+async def unexpected_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    job_id = request.path_params.get("job_id")
+    logger.exception("Unhandled API exception (job_id=%s)", job_id)
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Retry-After", "X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset"],
     allow_credentials=True,
 )
 app.include_router(api_router)

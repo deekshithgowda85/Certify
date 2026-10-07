@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion'
 
-export default function CourseCard({ course, onGenerate, certified, busy }) {
+export default function CourseCard({ course, onGenerate, certified, busy, disabled }) {
   return (
     <motion.div whileHover={{ y: -4, scale: 1.02 }} whileTap={{ scale: 0.98 }}
       transition={{ type: 'spring', stiffness: 300, damping: 20 }}
@@ -31,7 +31,7 @@ export default function CourseCard({ course, onGenerate, certified, busy }) {
       <motion.button
         whileTap={{ scale: 0.96 }}
         onClick={() => onGenerate(course)}
-        disabled={busy}
+        disabled={busy || disabled}
         className={`w-full py-2.5 text-sm transition-all
           ${certified
             ? 'btn-secondary'

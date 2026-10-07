@@ -6,6 +6,8 @@ Small jobs are rendered **inline** inside the Celery worker; large jobs get thei
 
 Stack: FastAPI · Celery · Redis 7 · PostgreSQL 15 · SQLAlchemy 2 · Alembic · ReportLab · Docker SDK.
 
+Module guides: [API](api/README.md) · [Frontend](frontend/README.md) · [Dispatcher](dispatcher/README.md) · [PDF generator](pdf_generator/README.md) · [Database migrations](alembic/README.md) · [Tests](tests/README.md).
+
 ## Architecture Overview
 
 ```
@@ -105,18 +107,34 @@ PDF generation time, database latency, and host CPU; with sandbox jobs, a rough 
 
 ## Quick Start
 
-```bash
+```powershell
 git clone <repo> && cd bulk-certificate-generator
-cp .env.example .env
+Copy-Item .env.example .env
 docker compose build
 docker compose up -d
 # API:  http://localhost:8000
 # Docs: http://localhost:8000/docs
 ```
 
+For the frontend's standalone development server, use `npm install` and `npm run dev` inside `frontend/`; see [frontend/README.md](frontend/README.md). API and module details are in the linked service READMEs above.
+
 The API applies Alembic migrations on start-up (`alembic upgrade head`, run from the FastAPI lifespan).
 `docker compose build` also builds the `bulk-certificate-generator-pdf-generator:latest` image, and the dispatcher
 waits for that build step to complete before it starts.
+
+## API Request Protection
+
+The API uses Redis-backed limits shared by all API workers: login and registration allow 5 requests per client IP
+per minute, and job creation allows 10 requests per authenticated user per minute. Rejected requests return JSON
+`429` responses with a `Retry-After` header. These limits can be adjusted with `AUTH_RATE_LIMIT_PER_MINUTE`,
+`JOB_RATE_LIMIT_PER_MINUTE`, and `RATE_LIMIT_WINDOW_SECONDS`.
+
+Certificate job creation includes an `Idempotency-Key`. Repeating the same request with the same key replays the
+original result without enqueueing another job; reusing a key for a different request returns `409`. The frontend
+automatically retries transient failures only for safe reads and idempotent job submissions. It does not retry
+login or registration submissions.
+
+The frontend displays notifications at the bottom-center for invalid signup data, authentication outcomes, job queueing and completion, partial failures, download failures, and API/data-loading errors. Job polling continues through temporary network/server failures and reports when a refresh is being retried.
 
 ## Running Tests
 
