@@ -24,7 +24,12 @@ export default function LoginPage() {
       toast.success('Welcome back!')
       navigate('/dashboard/certificates', { replace: true })
     } catch (e) {
-      setErr(e.response?.data?.detail || 'Invalid credentials')
+      const detail = e.response?.data?.detail
+      const message = typeof detail === 'string'
+        ? detail
+        : 'Unable to sign in. Check your email and password and try again.'
+      setErr(message)
+      toast.error(message)
     } finally { setBusy(false) }
   }
 

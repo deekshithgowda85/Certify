@@ -58,7 +58,7 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="p-8 max-w-3xl">
+    <div className="min-h-full w-full p-4 sm:p-6 lg:p-8">
       <h2 className="font-display font-bold text-2xl text-white mb-8">Profile</h2>
 
       {/* Identity card */}
@@ -134,7 +134,7 @@ export default function ProfilePage() {
           <span className="text-sm text-secondary">{jobs.length} total</span>
         </div>
         {jobs.length > 0 ? (
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">
             {jobs.map(job => <CertificateCard key={job.job_id} job={job} />)}
           </div>
         ) : (
