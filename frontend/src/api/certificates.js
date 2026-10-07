@@ -13,6 +13,7 @@ export const createJob = (d) => api.post('/api/v1/jobs', d, {
 })
 export const getJob    = (id) => api.get(`/api/v1/jobs/${id}`)
 export const getJobs   = ()  => api.get('/api/v1/jobs')
+export const getJobRecipients = (id, params) => api.get(`/api/v1/jobs/${id}/recipients`, { params })
 
 const downloadBlob = (blob, name) => {
   const url = window.URL.createObjectURL(blob)

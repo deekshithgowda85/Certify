@@ -6,6 +6,9 @@ React/Vite application for registration, login, certificate creation and downloa
 
 - Responsive black-and-white application theme and animated dashboard components.
 - Course templates and a manual certificate job form.
+- A standalone `/bulk-certificates` page with an editable recipient table, add/remove row controls, a 10-row shortcut, per-row course/date fields, CSV import (comma-separated headers: `name,email,course_name,completion_date`), progress/results, and automatic ZIP download after the bulk job completes.
+- CSV import replaces the current recipient table and accepts up to 10,000 participants; a downloadable CSV template is provided. Use ISO completion dates (`YYYY-MM-DD`) for best compatibility.
+- Bulk drafts are kept in the current browser session when a visitor signs in or registers before submission.
 - A synchronous generation lock prevents multiple concurrent submissions from the page.
 - Job status/progress polling, certificate history, PDF downloads, and bulk ZIP downloads.
 - Profile editing and generated/processing job statistics.
@@ -17,6 +20,7 @@ React/Vite application for registration, login, certificate creation and downloa
 
 - `/login`: sign in.
 - `/register`: create an account and sign in.
+- `/bulk-certificates`: prepare a multi-recipient job and download successful PDFs as a ZIP.
 - `/dashboard/certificates`: select a course or submit a custom certificate job.
 - `/dashboard/profile`: edit profile and review job history/statistics.
 - `/admin/metrics`: view service, queue, and sandbox metrics.

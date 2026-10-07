@@ -7,6 +7,7 @@ import { getApiErrorMessage } from './api/errors'
 import ProtectedRoute from './components/ProtectedRoute'
 import LoginPage      from './pages/LoginPage'
 import RegisterPage   from './pages/RegisterPage'
+import BulkCertificatesPage from './pages/BulkCertificatesPage'
 import DashboardPage  from './pages/DashboardPage'
 import ProfilePage    from './components/profile/ProfilePage'
 import CertificatesPage from './components/certificates/CertificatesPage'
@@ -38,6 +39,7 @@ export default function App() {
             <Route path="/"         element={<Navigate to="/login" replace />} />
             <Route path="/login"    element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
+            <Route path="/bulk-certificates" element={<BulkCertificatesPage />} />
 
             <Route path="/dashboard" element={
               <ProtectedRoute><DashboardPage /></ProtectedRoute>

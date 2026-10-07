@@ -136,6 +136,8 @@ login or registration submissions.
 
 The frontend displays notifications at the bottom-center for invalid signup data, authentication outcomes, job queueing and completion, partial failures, download failures, and API/data-loading errors. Job polling continues through temporary network/server failures and reports when a refresh is being retried.
 
+The standalone `/bulk-certificates` page allows users to import a CSV (including CSV files exported from Excel), review many recipients in a table, and submit them together in one job. It tracks progress, displays failed-recipient errors, and downloads successful certificates in a ZIP. CSV import replaces the current table and supports up to 10,000 participants. Unauthenticated users can prepare their list first; the draft stays in the browser session while they sign in or register. See [frontend/README.md](frontend/README.md).
+
 ## Running Tests
 
 The API and the dispatcher are separate services that both have a top-level `app` package, so each suite runs in

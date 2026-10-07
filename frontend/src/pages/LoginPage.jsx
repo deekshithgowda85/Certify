@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import toast from 'react-hot-toast'
 import { login } from '../api/auth'
@@ -9,6 +9,7 @@ import AuthQuickLinks from '../components/AuthQuickLinks'
 
 export default function LoginPage() {
   const navigate   = useNavigate()
+  const location   = useLocation()
   const loginStore = useAuthStore((s) => s.login)
   const [form, setForm]   = useState({ email: '', password: '' })
   const [busy, setBusy]   = useState(false)
@@ -23,7 +24,7 @@ export default function LoginPage() {
       const res = await login(form)
       loginStore(res.data.access_token, res.data.user)
       toast.success('Welcome back!')
-      navigate('/dashboard/certificates', { replace: true })
+      navigate(location.state?.from || '/dashboard/certificates', { replace: true })
     } catch (e) {
       const message = getApiErrorMessage(e, 'Unable to sign in. Check your email and password and try again.')
       setErr(message)
@@ -82,11 +83,17 @@ export default function LoginPage() {
 
           <p className="text-center text-sm text-slate-500 mt-6">
             No account?{' '}
-            <Link to="/register" className="text-brand-400 hover:text-brand-300 font-medium">
+            <Link to="/register" state={location.state} className="text-brand-400 hover:text-brand-300 font-medium">
               Create one
             </Link>
           </p>
         </div>
+        <p className="mt-5 text-center text-sm text-slate-500">
+          Need to issue certificates for a group?{' '}
+          <Link to="/bulk-certificates" className="text-brand-400 hover:text-brand-300 font-medium">
+            Use bulk generation
+          </Link>
+        </p>
         <AuthQuickLinks />
       </motion.div>
     </div>

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import toast from 'react-hot-toast'
 import { register } from '../api/auth'
@@ -25,6 +25,7 @@ function Field({ name, label, type = 'text', placeholder, value, error, onChange
 
 export default function RegisterPage() {
   const navigate   = useNavigate()
+  const location   = useLocation()
   const loginStore = useAuthStore((s) => s.login)
   const [form, setForm] = useState({ full_name: '', email: '', password: '', confirm: '' })
   const [busy, setBusy] = useState(false)
@@ -54,7 +55,7 @@ export default function RegisterPage() {
       const res = await register({ full_name: form.full_name, email: form.email, password: form.password })
       loginStore(res.data.access_token, res.data.user)
       toast.success('Account created! Welcome 🎉')
-      navigate('/dashboard/certificates', { replace: true })
+      navigate(location.state?.from || '/dashboard/certificates', { replace: true })
     } catch (e) {
       const message = getApiErrorMessage(e, 'Registration failed. Try again.')
       setErrs({ api: message })
@@ -101,11 +102,17 @@ export default function RegisterPage() {
 
           <p className="text-center text-sm text-slate-500 mt-6">
             Already have an account?{' '}
-            <Link to="/login" className="text-brand-400 hover:text-brand-300 font-medium">
+            <Link to="/login" state={location.state} className="text-brand-400 hover:text-brand-300 font-medium">
               Sign in
             </Link>
           </p>
         </div>
+        <p className="mt-5 text-center text-sm text-slate-500">
+          Generating certificates for a group?{' '}
+          <Link to="/bulk-certificates" className="text-brand-400 hover:text-brand-300 font-medium">
+            Prepare a bulk certificate batch
+          </Link>
+        </p>
         <AuthQuickLinks />
       </motion.div>
     </div>
