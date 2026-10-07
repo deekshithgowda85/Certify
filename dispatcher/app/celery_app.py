@@ -1,6 +1,6 @@
 """Celery application of the dispatcher (the worker that decides INLINE vs SANDBOX)."""
 from celery import Celery
-from celery.signals import worker_process_init, worker_shutdown
+from celery.signals import worker_process_init, worker_ready, worker_shutdown
 
 from app.config import settings
 
@@ -45,3 +45,10 @@ def shutdown_pool(sender=None, **kwargs):
     from app.pool.container_pool import pool
 
     pool.shutdown()
+
+
+@worker_ready.connect
+def start_pool(sender=None, **kwargs):
+    from app.pool.container_pool import pool
+
+    pool.start()

@@ -1,4 +1,5 @@
 """Dispatcher settings (pydantic-settings, configured via environment variables)."""
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -18,10 +19,12 @@ class Settings(BaseSettings):
     SANDBOX_THRESHOLD: int = 10
 
     # Sandbox container configuration
+    SANDBOX_MIN_IDLE: int = Field(default=2, ge=0)
+    SANDBOX_MAX_CONTAINERS: int = Field(default=5, ge=1)
     SANDBOX_IMAGE: str = "bulk-certificate-generator-pdf-generator:latest"
     SANDBOX_CONTAINER_PREFIX: str = "sandbox"
     SANDBOX_VOLUME: str = "bulk-certificate-generator_certificate_storage"
-    SANDBOX_NETWORK: str = "bulk-certificate-generator_default"
+    SANDBOX_NETWORK: str = "certify_default"
     SANDBOX_MEM_LIMIT: str = "256m"
     SANDBOX_CPU_PERIOD: int = 100000
     SANDBOX_CPU_QUOTA: int = 50000  # 0.5 CPU

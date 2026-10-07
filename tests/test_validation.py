@@ -1,4 +1,5 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -50,8 +51,25 @@ def test_future_date_rejected():
 
 
 def test_today_is_allowed():
-    validated, error = validate_recipient(make_recipient(1, completion_date=date.today().isoformat()))
+    today_utc = datetime.now(ZoneInfo("UTC")).date().isoformat()
+    validated, error = validate_recipient(make_recipient(1, completion_date=today_utc))
     assert error is None and validated is not None
+
+
+def test_client_local_today_is_allowed():
+    timezone = "Asia/Kolkata"
+    local_today = datetime.now(ZoneInfo(timezone)).date().isoformat()
+    validated, error = validate_recipient(
+        make_recipient(1, completion_date=local_today, client_timezone=timezone)
+    )
+    assert error is None and validated is not None
+
+
+def test_invalid_client_timezone_is_rejected():
+    validated, error = validate_recipient(
+        make_recipient(1, client_timezone="not/a-timezone")
+    )
+    assert validated is None and "client_timezone" in error
 
 
 @pytest.mark.parametrize("value", ["2024-13-45", "yesterday", "", None])
@@ -75,6 +93,9 @@ def test_fallback_fields_are_storable_for_garbage_input():
 
 def test_model_can_be_used_directly():
     model = RecipientValidated(
-        name="A", email="a@example.com", course_name="C", completion_date=date.today()
+        name="A",
+        email="a@example.com",
+        course_name="C",
+        completion_date=datetime.now(ZoneInfo("UTC")).date(),
     )
     assert model.name == "A"

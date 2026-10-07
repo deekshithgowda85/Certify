@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import date, datetime
 from typing import Any, Literal, Optional
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, ValidationError, ValidationInfo, field_validator
 
 # Stored in the NOT NULL completion_date column when the supplied value is not a parseable date.
 PLACEHOLDER_DATE = date(1970, 1, 1)
@@ -17,6 +18,7 @@ class RecipientValidated(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     email: EmailStr
     course_name: str = Field(min_length=1, max_length=255)
+    client_timezone: str = "UTC"
     completion_date: date
 
     @field_validator("name", "course_name", mode="before")
@@ -24,10 +26,20 @@ class RecipientValidated(BaseModel):
     def _strip(cls, value: Any) -> Any:
         return value.strip() if isinstance(value, str) else value
 
+    @field_validator("client_timezone")
+    @classmethod
+    def _valid_client_timezone(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except (ValueError, ZoneInfoNotFoundError) as exc:
+            raise ValueError("client_timezone must be a valid IANA timezone") from exc
+        return value
+
     @field_validator("completion_date")
     @classmethod
-    def _not_in_future(cls, value: date) -> date:
-        if value > date.today():
+    def _not_in_future(cls, value: date, info: ValidationInfo) -> date:
+        client_timezone = info.data.get("client_timezone", "UTC")
+        if value > datetime.now(ZoneInfo(client_timezone)).date():
             raise ValueError("completion_date cannot be in the future")
         return value
 

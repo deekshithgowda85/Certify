@@ -15,7 +15,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
@@ -49,7 +49,7 @@ HAS_DISPATCHER = importlib.util.find_spec("app.tasks") is not None
 
 collect_ignore = []
 if not HAS_API:
-    collect_ignore += ["test_api_jobs.py", "test_validation.py"]
+    collect_ignore += ["test_api_jobs.py", "test_api_metrics.py", "test_auth.py", "test_validation.py"]
 if not HAS_DISPATCHER:
     collect_ignore += [
         "test_inline_mode.py",
@@ -74,7 +74,10 @@ def sync_engine():
 @pytest.fixture(autouse=True)
 def clean_db(sync_engine):
     with sync_engine.begin() as conn:
-        conn.execute(text("TRUNCATE TABLE recipients, jobs RESTART IDENTITY CASCADE"))
+        existing_tables = set(inspect(conn).get_table_names())
+        tables = [name for name in ("recipients", "jobs", "users") if name in existing_tables]
+        if tables:
+            conn.execute(text(f"TRUNCATE TABLE {', '.join(tables)} RESTART IDENTITY CASCADE"))
     yield
 
 
@@ -99,6 +102,23 @@ if HAS_API:
 
     @pytest_asyncio.fixture
     async def client():
+        from app.main import app
+
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as http_client:
+            response = await http_client.post(
+                "/api/v1/auth/register",
+                json={
+                    "full_name": "Test Owner",
+                    "email": "test-owner@example.com",
+                    "password": "password123",
+                },
+            )
+            http_client.headers["Authorization"] = f"Bearer {response.json()['access_token']}"
+            yield http_client
+
+    @pytest_asyncio.fixture
+    async def anonymous_client():
         from app.main import app
 
         transport = httpx.ASGITransport(app=app)

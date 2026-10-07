@@ -24,6 +24,7 @@ class JobCreateRequest(BaseModel):
 
 class JobCreateResponse(BaseModel):
     job_id: uuid.UUID
+    recipient_id: uuid.UUID
     status: str
     total_recipients: int
     valid_recipients: int
@@ -46,6 +47,11 @@ class JobResponse(BaseModel):
     container_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime
+    recipient_id: Optional[uuid.UUID] = None
+
+
+class JobListResponse(BaseModel):
+    jobs: list[JobResponse]
 
 
 class HealthResponse(BaseModel):

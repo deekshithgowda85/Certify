@@ -10,6 +10,9 @@ celery==5.4.0
 redis==5.0.4
 httpx==0.27.0
 python-multipart==0.0.9
+passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
+python-jose[cryptography]==3.3.0
 # --- used by the test-suite (sync fixtures create/truncate the test database)
 psycopg2-binary==2.9.9
 pytest==8.2.0

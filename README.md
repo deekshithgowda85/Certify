@@ -60,7 +60,7 @@ Stack: FastAPI · Celery · Redis 7 · PostgreSQL 15 · SQLAlchemy 2 · Alembic 
 | `dispatcher`    | Celery worker. Chooses INLINE or SANDBOX, spawns/monitors containers, finalizes job status. Mounts `/var/run/docker.sock`. |
 | `redis`         | Celery broker and result backend.                                                                                          |
 | `db`            | PostgreSQL: `jobs` and `recipients`.                                                                                       |
-| `pdf-generator` | Image only (never a running service). Built by `docker compose build`, spawned on demand.                                  |
+| `pdf-generator` | Image only (never a running service). Built by `docker compose build`; warm sandbox containers run in the dispatcher pool.   |
 
 ## How Threshold Switching Works
 
@@ -69,27 +69,39 @@ The dispatcher counts the job's `PENDING` recipients and compares with `SANDBOX_
 - **8 recipients (<= 10) → INLINE.** PDFs are rendered inside the worker process: no container start-up cost.
 - **10 recipients → INLINE**, **11 recipients → SANDBOX** (the boundary is inclusive).
 - **50 recipients (> 10) → SANDBOX.** The dispatcher writes `input.json` onto the shared volume, takes a
-  sandbox slot, starts an isolated `pdf-generator` container (256 MB RAM, 0.5 CPU), waits for it (max 300 s),
+  warm sandbox slot, runs the isolated `pdf-generator` container (256 MB RAM, 0.5 CPU), waits for it (max 300 s),
   reads its exit code/logs, reconciles the database and removes the container.
 
 Recipients that were invalid at request time are stored as `FAILED` immediately and never count towards the threshold.
 
-**Concurrency cap.** The dispatcher uses one Celery process with five worker threads and one shared pool. The pool
-never creates more than five containers, including its two warm idle containers. A job waits up to
+**Concurrency cap.** The dispatcher uses one Celery process and one shared pool. Set `SANDBOX_MAX_CONTAINERS`
+(default `5`) to choose the maximum number of sandbox containers; Celery worker concurrency follows that value.
+`SANDBOX_MIN_IDLE` (default `2`) sets how many containers are kept warm from dispatcher startup and is capped at the maximum. A job waits up to
 `SANDBOX_SLOT_WAIT_SECONDS` (120 s) for a container; after that, the task retries through Celery instead of waiting
 until the 600-second soft limit. Each container execution is independently capped at 300 seconds.
+
+Set the values in `.env` before starting Compose, for example:
+
+```dotenv
+SANDBOX_MAX_CONTAINERS=8
+SANDBOX_MIN_IDLE=2
+```
+
+After changing either value, apply it with `docker compose up -d dispatcher`; Compose recreates the worker with the
+requested pool limit and matching Celery concurrency.
 
 ## Scalability
 
 - The bundled deployment intentionally runs one dispatcher process. Scaling dispatcher replicas would create one
-  five-container pool per replica and is not supported while the cap is process-local.
+  independently configured pool per replica and is not supported while the cap is process-local.
 - Each sandbox: 256 MB RAM, 0.5 CPU, 64 PIDs, all Linux capabilities dropped, `no-new-privileges`.
 
-**Capacity estimate.** Up to five jobs can execute concurrently because the dispatcher has five threads. The
-practical active generation limit is five jobs, matching the pool's hard ceiling of five containers.
+**Capacity estimate.** Up to `SANDBOX_MAX_CONTAINERS` tasks can execute concurrently because the dispatcher worker
+uses the same number of threads. The practical active sandbox generation limit is also
+`SANDBOX_MAX_CONTAINERS`.
 Additional API requests are accepted and queued by Celery/Redis. Actual throughput depends on recipient count,
 PDF generation time, database latency, and host CPU; with sandbox jobs, a rough upper bound is
-`5 / average sandbox duration` jobs per second.
+`SANDBOX_MAX_CONTAINERS / average sandbox duration` jobs per second.
 
 ## Quick Start
 

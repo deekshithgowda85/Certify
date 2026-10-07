@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     TESTING: bool = False
     RUN_MIGRATIONS: bool = True
     MAX_RECIPIENTS_PER_JOB: int = 10000
+    SANDBOX_MAX_CONTAINERS: int = 5
+    SECRET_KEY: str = "change-me-in-production"
+    ALGORITHM: str = "HS256"
 
     # Name of the Celery task implemented by the dispatcher service.
     CERTIFICATE_TASK_NAME: str = "app.tasks.certificate_task.certificate_task"

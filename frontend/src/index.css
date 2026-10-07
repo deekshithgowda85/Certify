@@ -1,0 +1,71 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background-color: #f4f4f4;
+    color: #0d0d0d;
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+@layer utilities {
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
+  .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+}
+
+.text-white { color: #0d0d0d !important; }
+.text-on-primary { color: #ffffff !important; }
+
+.btn-primary,
+.btn-secondary {
+  border-radius: 4px;
+  font-weight: 700;
+  transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+
+.btn-primary {
+  background-color: #0d0d0d;
+  color: #ffffff !important;
+}
+
+.btn-primary:hover { background-color: #333333; }
+
+.btn-secondary {
+  background-color: #0d0d0d;
+  color: #ffffff !important;
+}
+
+.btn-secondary:hover { background-color: #333333; }
+
+.btn-quiet {
+  color: #0d0d0d;
+  border: 1px solid #6d6d6d;
+  border-radius: 4px;
+}
+
+.btn-quiet:hover { background-color: #f4f4f4; }
+
+/* Confetti burst */
+@keyframes confettiFall {
+  0%   { transform: translateY(-20px) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(80px)  rotate(720deg); opacity: 0; }
+}
+.confetti-piece {
+  position: absolute;
+  width: 8px; height: 8px;
+  animation: confettiFall 1.2s ease-out forwards;
+}
+
+/* Shimmer for loading states */
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+.shimmer {
+  background: #eeeeee;
+}

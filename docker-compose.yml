@@ -1,4 +1,4 @@
-name: bulk-certificate-generator
+name: certify
 
 services:
   db:
@@ -36,6 +36,8 @@ services:
     ports:
       - "8000:8000"
     env_file: .env
+    environment:
+      SANDBOX_MAX_CONTAINERS: ${SANDBOX_MAX_CONTAINERS:-5}
     volumes:
       - ./api/app:/app/app
       - ./alembic:/app/alembic
@@ -47,12 +49,28 @@ services:
       redis:
         condition: service_healthy
 
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: certify-frontend
+    ports:
+      - "3000:80"
+    restart: unless-stopped
+    depends_on:
+      - api
+
   dispatcher:
     build:
       context: ./dispatcher
       dockerfile: Dockerfile
-    command: celery -A app.celery_app worker --loglevel=info --pool=threads --concurrency=5 -Q certificates
+    command: celery -A app.celery_app worker --loglevel=info --pool=threads --concurrency=${SANDBOX_MAX_CONTAINERS:-5} -Q certificates
+    stop_grace_period: 5m
     env_file: .env
+    environment:
+      SANDBOX_MIN_IDLE: ${SANDBOX_MIN_IDLE:-2}
+      SANDBOX_MAX_CONTAINERS: ${SANDBOX_MAX_CONTAINERS:-5}
+      SANDBOX_NETWORK: ${COMPOSE_PROJECT_NAME:-certify}_default
     volumes:
       - ./dispatcher/app:/app/app
       - ./tests:/app/tests

@@ -24,6 +24,7 @@ class NoValidRecipientsError(Exception):
 @dataclass
 class CreatedJob:
     job_id: uuid.UUID
+    recipient_id: uuid.UUID
     total: int
     valid: int
     invalid: int
@@ -45,7 +46,12 @@ def parse_uuid(value: str) -> Optional[uuid.UUID]:
         return None
 
 
-async def create_job(session: AsyncSession, title: str, raw_recipients: list[dict[str, Any]]) -> CreatedJob:
+async def create_job(
+    session: AsyncSession,
+    title: str,
+    raw_recipients: list[dict[str, Any]],
+    user_id: uuid.UUID,
+) -> CreatedJob:
     job_id = uuid.uuid4()
     rows: list[Recipient] = []
     errors: list[dict[str, Any]] = []
@@ -82,6 +88,7 @@ async def create_job(session: AsyncSession, title: str, raw_recipients: list[dic
     invalid = len(rows) - valid
     job = Job(
         id=job_id,
+        user_id=user_id,
         title=title,
         status=JobStatus.PENDING.value,
         total_recipients=len(rows),
@@ -92,7 +99,7 @@ async def create_job(session: AsyncSession, title: str, raw_recipients: list[dic
     session.add(job)
     session.add_all(rows)
     await session.commit()
-    return CreatedJob(job_id=job_id, total=len(rows), valid=valid, invalid=invalid)
+    return CreatedJob(job_id=job_id, recipient_id=rows[0].id, total=len(rows), valid=valid, invalid=invalid)
 
 
 async def mark_job_failed(session: AsyncSession, job_id: uuid.UUID, message: str) -> None:
@@ -120,11 +127,11 @@ async def mark_job_failed(session: AsyncSession, job_id: uuid.UUID, message: str
     await session.commit()
 
 
-async def get_job(session: AsyncSession, job_id: str) -> Optional[Job]:
+async def get_job(session: AsyncSession, job_id: str, user_id: uuid.UUID) -> Optional[Job]:
     parsed = parse_uuid(job_id)
     if parsed is None:
         return None
-    return await session.get(Job, parsed)
+    return await session.scalar(select(Job).where(Job.id == parsed, Job.user_id == user_id))
 
 
 async def list_recipients(
