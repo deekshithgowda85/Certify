@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     MAX_RECIPIENTS_PER_JOB: int = 10000
     AUTH_RATE_LIMIT_PER_MINUTE: int = Field(default=5, ge=1)
     JOB_RATE_LIMIT_PER_MINUTE: int = Field(default=10, ge=1)
+    PUBLIC_JOB_RATE_LIMIT_PER_MINUTE: int = Field(default=3, ge=1)
     RATE_LIMIT_WINDOW_SECONDS: int = Field(default=60, ge=1)
     SANDBOX_MAX_CONTAINERS: int = 5
     SECRET_KEY: str = "change-me-in-production"

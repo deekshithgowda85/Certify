@@ -17,16 +17,15 @@ function StatusPill({ value }) {
 }
 
 const cardMotion = {
-  whileHover: { y: -4, scale: 1.01 },
-  transition: { type: 'spring', stiffness: 300, damping: 22 },
+  whileHover: {},
 }
 
 function MetricCard({ label, value, detail, tone = 'text-primary' }) {
   return (
-    <motion.div {...cardMotion} className="bg-surface-card border border-surface-border rounded-2xl p-5">
-      <p className="text-xs font-bold uppercase tracking-[0.14em] text-secondary">{label}</p>
-      <p className={`font-display text-3xl mt-3 ${tone}`}>{value}</p>
-      <p className="text-sm text-secondary mt-1">{detail}</p>
+    <motion.div {...cardMotion} className="hard-shadow-hover border-r border-b border-primary bg-surface-card p-4 sm:p-5">
+      <p className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-secondary">{label}</p>
+      <p className={`font-mono text-3xl font-bold tabular-nums mt-3 ${tone}`}>{value}</p>
+      <p className="mt-1 font-body text-sm text-secondary">{detail}</p>
     </motion.div>
   )
 }
@@ -118,8 +117,8 @@ function SandboxSlotCard({ slot }) {
 
   return (
     <motion.article {...cardMotion}
-      className={`flex min-h-[205px] flex-col items-center gap-1.5 rounded-xl border p-4 text-center text-primary shadow-sm
-        ${isEmpty ? 'border-dashed border-surface-border bg-surface' : 'border-surface-border bg-surface-card'}`}>
+      className={`hard-shadow-hover flex min-h-[205px] flex-col items-center gap-1.5 border-b border-r border-primary p-4 text-center text-primary
+        ${isEmpty ? 'bg-surface' : 'bg-surface-card'}`}>
       <div className="flex w-full items-start justify-between gap-2 text-left">
         <span className="text-xs text-secondary">Slot {slot.slot}</span>
         <span className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[10px] font-semibold uppercase
@@ -138,8 +137,8 @@ function SandboxSlotCard({ slot }) {
       </span>
 
       <div className="mt-1 w-full">
-        <div className="h-1.5 overflow-hidden rounded-full bg-surface-border">
-          <div className="h-full rounded-full bg-primary" style={{ width: `${cpu ?? 0}%` }} />
+        <div className="h-1.5 overflow-hidden bg-surface-border">
+          <div className="h-full bg-brand-500" style={{ width: `${cpu ?? 0}%` }} />
         </div>
         <p className="mt-1 text-[10px] text-secondary">
           CPU {cpu === null ? '—' : `${cpu.toFixed(0)}%`}
@@ -235,7 +234,7 @@ function SectionHeading({ eyebrow, title, detail }) {
 
 function EmptyState({ children }) {
   return (
-    <div className="rounded-2xl border border-dashed border-surface-border p-5 text-sm text-secondary">
+    <div className="border border-primary p-5 font-body text-sm text-secondary">
       {children}
     </div>
   )
@@ -263,7 +262,7 @@ export default function MetricsPage() {
   if (!data) {
     return (
       <div className="p-8">
-        <div role="alert" className="rounded-2xl border border-primary/30 bg-surface-card p-5 text-sm text-primary">
+        <div role="alert" className="border border-primary border-l-4 border-l-brand-500 bg-surface-card p-5 text-sm text-primary">
           <p>Metrics are currently unavailable. Check the API connection and try again.</p>
           <button type="button" onClick={() => refetch()} disabled={isFetching}
             className="btn-quiet mt-4 px-3 py-2 disabled:opacity-50">
@@ -291,16 +290,16 @@ export default function MetricsPage() {
   }
 
   return (
-    <div className="max-w-7xl p-8">
-      <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
+    <div className="newsprint-page mx-auto max-w-screen-xl p-4 sm:p-6 lg:p-8">
+      <header className="newsprint-masthead mb-6 flex flex-wrap items-end justify-between gap-4 pb-5">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">Admin</p>
-          <h2 className="font-display text-2xl text-primary mt-1">System metrics</h2>
-          <p className="text-sm text-secondary mt-2">Live queue, certificate throughput, and worker health.</p>
+          <p className="newsprint-kicker">Operations desk · Live edition</p>
+          <h2 className="font-display text-4xl font-black leading-none tracking-tight text-primary mt-2 sm:text-5xl">System metrics</h2>
+          <p className="mt-3 font-body text-sm text-secondary">Live queue, certificate throughput, and worker health.</p>
           <div className="mt-4 flex flex-wrap gap-2">
             {Object.entries(services).map(([service, status]) => (
-              <span key={service} className="inline-flex items-center gap-2 rounded-full border border-surface-border bg-surface-card px-3 py-1 text-xs text-secondary">
-                <span className={`h-2 w-2 rounded-full ${['ok', 'healthy'].includes(String(status).toLowerCase()) ? 'bg-primary' : 'bg-secondary'}`} />
+              <span key={service} className="inline-flex min-h-[40px] items-center gap-2 border border-primary bg-surface-card px-3 py-1 font-mono text-[10px] uppercase tracking-wider text-secondary">
+                <span className={`h-2 w-2 ${['ok', 'healthy'].includes(String(status).toLowerCase()) ? 'bg-brand-500' : 'bg-secondary'}`} />
                 <span className="capitalize">{service}</span>
                 <strong className="font-semibold text-primary">{status}</strong>
               </span>
@@ -319,15 +318,25 @@ export default function MetricsPage() {
         </div>
       </header>
 
+      <div className="newsprint-inverted newsprint-ticker mb-8" aria-hidden="true">
+        <div className="newsprint-ticker-track" aria-hidden="true">
+          {Array.from({ length: 2 }, (_, index) => (
+            <span key={index} className="newsprint-ticker-item">
+              Queue <span className="text-brand-400">{pending}</span> pending <span className="text-brand-400">◆</span> {sandboxes.active ?? 0} active sandboxes <span className="text-brand-400">◆</span> {failedJobs} failures in 24 hours <span className="text-brand-400">◆</span>
+            </span>
+          ))}
+        </div>
+      </div>
+
       {isError && (
-        <div role="alert" className="mb-6 rounded-xl border border-primary/30 bg-surface-card p-4 text-sm text-primary">
+        <div role="alert" className="mb-6 border border-primary border-l-4 border-l-brand-500 bg-surface-card p-4 text-sm text-primary">
           Could not refresh metrics. Showing the most recently received data.
         </div>
       )}
 
       <section className="mb-8">
         <SectionHeading eyebrow="Queue" title="Certificate jobs" detail={`Queue: ${queue.name || 'unknown'} · completed and failed job totals cover the last 24 hours.`} />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <div className="grid gap-px border border-primary bg-primary sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           <MetricCard label="Queued" value={pending} detail={queue.status || 'Queue depth unavailable'} tone="text-primary" />
           <MetricCard label="Processing" value={queue.processing ?? 0} detail="Jobs currently being processed" />
           <MetricCard label="Active sandboxes" value={sandboxes.active ?? 0} detail={`${sandboxes.capacity ?? 5} total capacity`} />
@@ -336,7 +345,7 @@ export default function MetricsPage() {
           <MetricCard label="Failed · 24h" value={failedJobs} detail="Failed or partially failed jobs"
             tone="text-primary" />
         </div>
-        <motion.div {...cardMotion} className="mt-4 rounded-2xl border border-surface-border bg-surface-card p-5">
+        <motion.div {...cardMotion} className="hard-shadow-hover mt-4 border border-primary bg-surface-card p-5">
           <h4 className="mb-3 text-sm font-semibold text-primary">Queue depth · last 5 minutes</h4>
           <QueueHistory points={queueHistory} />
         </motion.div>
@@ -344,7 +353,7 @@ export default function MetricsPage() {
 
       <section className="mb-8">
         <SectionHeading eyebrow="Activity" title="Certificate throughput" detail="Successfully generated certificates, grouped by processing mode." />
-        <motion.div {...cardMotion} className="rounded-2xl border border-surface-border bg-surface-card p-5">
+        <motion.div {...cardMotion} className="hard-shadow-hover border border-primary bg-surface-card p-5">
           <ThroughputChart points={data.throughput} avg={data.avg_seconds} />
         </motion.div>
       </section>
@@ -352,7 +361,7 @@ export default function MetricsPage() {
       <section className="mb-8">
         <SectionHeading eyebrow="Workers" title="Container status and health" detail="Live container details reported by the dispatcher." />
         {containers.length ? (
-          <div className="overflow-x-auto rounded-2xl border border-surface-border bg-surface-card">
+          <div className="overflow-x-auto border border-primary bg-surface-card">
             <table className="w-full min-w-[680px] text-left text-sm">
               <thead className="text-xs uppercase tracking-wide text-secondary">
                 <tr className="border-b border-surface-border">
@@ -383,7 +392,7 @@ export default function MetricsPage() {
       </section>
 
       <section className="mb-8">
-        <div className="rounded-2xl border border-surface-border bg-surface-card p-5 shadow-sm sm:p-6">
+        <div className="border border-primary bg-surface-card p-5 sm:p-6">
           <div className="mb-5">
             <p className="text-xs font-bold uppercase tracking-[0.14em] text-primary">Sandbox pool</p>
             <h3 className="mt-1 font-display text-xl text-primary">Sandboxes ({sandboxes.capacity ?? 5})</h3>
@@ -397,7 +406,7 @@ export default function MetricsPage() {
               )}
             </p>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
+          <div className="grid gap-px border border-primary bg-primary sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
           {slots.map(slot => (
             <SandboxSlotCard key={slot.id || slot.slot} slot={slot} />
           ))}
@@ -407,12 +416,12 @@ export default function MetricsPage() {
 
       <section>
         <SectionHeading eyebrow="Activity" title="Throughput, failures, and job feed" detail="Certificate output by processing mode, common recipient failures, and latest job updates." />
-        <div className="grid gap-4 xl:grid-cols-2">
-          <motion.div {...cardMotion} className="rounded-2xl border border-surface-border bg-surface-card p-5">
+        <div className="grid gap-px border border-primary bg-primary xl:grid-cols-2">
+          <motion.div {...cardMotion} className="hard-shadow-hover border-r border-b border-primary bg-surface-card p-5">
             <h4 className="mb-4 text-sm font-semibold text-primary">Top failure reasons · 24h</h4>
             <FailureBreakdown failures={data.failures} />
           </motion.div>
-          <motion.div {...cardMotion} className="rounded-2xl border border-surface-border bg-surface-card p-5">
+          <motion.div {...cardMotion} className="hard-shadow-hover border-r border-b border-primary bg-surface-card p-5">
             <h4 className="mb-2 text-sm font-semibold text-primary">Recent job activity · 24h</h4>
             <JobActivity events={data.events} />
           </motion.div>

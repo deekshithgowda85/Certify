@@ -1,12 +1,8 @@
 import logging
 import os
-import re
 import tempfile
-import uuid
-import zipfile
 from pathlib import Path
 from typing import Annotated, Literal, Optional
-from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.concurrency import run_in_threadpool
@@ -17,28 +13,21 @@ from starlette.background import BackgroundTask
 from app.auth import get_current_user
 from app.database import get_session
 from app.models import Job, RecipientStatus, User
-from app.schemas.job import JobCreateRequest, JobCreateResponse, JobListItem, JobListResponse, JobResponse
+from app.schemas.job import JobCreateRequest, JobCreateResponse, JobListResponse, JobResponse
 from app.schemas.recipient import RecipientListResponse, RecipientOut
 from app.services import job_service
 from app.services import rate_limit
 from app.config import settings
+from app.api.v1.job_responses import (
+    build_zip as _build_zip,
+    content_disposition,
+    job_response as _job_response,
+    safe_filename,
+)
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 logger = logging.getLogger("certificate_api")
 CurrentUser = Annotated[User, Depends(get_current_user)]
-
-_UNSAFE_FILENAME = re.compile(r'[\\/:*?"<>|\r\n\t\x00]+')
-
-
-def safe_filename(value: str, fallback: str = "certificate") -> str:
-    cleaned = _UNSAFE_FILENAME.sub("_", value).strip(" ._")
-    return cleaned or fallback
-
-
-def content_disposition(filename: str) -> str:
-    """attachment header with an ASCII fallback plus the RFC 5987 UTF-8 form for non-ASCII names."""
-    fallback = filename.encode("ascii", "ignore").decode().replace('"', "") or "download"
-    return f"attachment; filename=\"{fallback}\"; filename*=utf-8\'\'{quote(filename)}"
 
 
 async def _job_or_404(session: AsyncSession, job_id: str, current_user: User) -> Job:
@@ -46,23 +35,6 @@ async def _job_or_404(session: AsyncSession, job_id: str, current_user: User) ->
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
     return job
-
-
-def _job_response(job: Job, recipient_id: Optional[uuid.UUID] = None) -> JobListItem:
-    return JobListItem(
-        job_id=job.id,
-        title=job.title,
-        status=job.status,
-        processing_mode=job.processing_mode,
-        total_recipients=job.total_recipients,
-        processed_count=job.processed_count,
-        success_count=job.success_count,
-        failed_count=job.failed_count,
-        container_id=job.container_id,
-        created_at=job.created_at,
-        updated_at=job.updated_at,
-        recipient_id=recipient_id,
-    )
 
 
 @router.post(
@@ -244,13 +216,6 @@ async def download_all(job_id: str, current_user: CurrentUser, session: AsyncSes
         headers={"Content-Disposition": content_disposition(f"{safe_filename(job.title, 'job')}_certificates.zip")},
         background=BackgroundTask(os.remove, handle.name),
     )
-
-
-def _build_zip(target: str, entries: list[tuple[Path, str]]) -> None:
-    # PDFs are already compressed, so store them; zipfile copies each file in chunks (never fully in RAM).
-    with zipfile.ZipFile(target, "w", compression=zipfile.ZIP_STORED, allowZip64=True) as archive:
-        for path, arcname in entries:
-            archive.write(path, arcname=arcname)
 
 
 @router.get(

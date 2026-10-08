@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 function PortfolioIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <rect x="3" y="7" width="18" height="14" rx="2" />
+      <rect x="3" y="7" width="18" height="14" />
       <path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18m-11 0v2h4v-2" />
     </svg>
   )
@@ -26,7 +26,7 @@ function AdminIcon() {
   )
 }
 
-const linkClass = 'inline-flex items-center gap-2 rounded-md px-2.5 py-2 text-xs font-medium text-secondary transition-colors hover:bg-surface-hover hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary'
+const linkClass = 'inline-flex min-h-[44px] items-center gap-2 border border-primary px-3 py-2 font-mono text-[10px] font-semibold uppercase tracking-wider text-secondary transition-colors hover:bg-primary hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary'
 
 export default function AuthQuickLinks() {
   return (

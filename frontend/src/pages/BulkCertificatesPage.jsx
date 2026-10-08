@@ -1,8 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { format } from 'date-fns'
-import { createJob, downloadAll, getJobRecipients } from '../api/certificates'
+import {
+  createJob,
+  createPublicJob,
+  downloadAll,
+  downloadPublicAll,
+  getJobRecipients,
+  getPublicJobRecipients,
+} from '../api/certificates'
 import { getApiErrorMessage } from '../api/errors'
 import { parseRecipientCsv } from '../utils/recipientCsv'
 import { useAuthStore } from '../store/authStore'
@@ -21,10 +28,10 @@ function newRecipient() {
   return { name: '', email: '', course_name: '', completion_date: today() }
 }
 
-function loadDraft() {
+function loadDraft(key) {
   let savedDraft
   try {
-    savedDraft = sessionStorage.getItem(DRAFT_KEY)
+    savedDraft = sessionStorage.getItem(key)
   } catch {
     return { title: '', recipients: [newRecipient()] }
   }
@@ -44,7 +51,7 @@ function loadDraft() {
     }
   } catch {
     try {
-      sessionStorage.removeItem(DRAFT_KEY)
+      sessionStorage.removeItem(key)
     } catch {
       return { title: '', recipients: [newRecipient()] }
     }
@@ -52,13 +59,16 @@ function loadDraft() {
   return { title: '', recipients: [newRecipient()] }
 }
 
-export default function BulkCertificatesPage() {
+export default function BulkCertificatesPage({ publicAccess = false }) {
   const navigate = useNavigate()
+  const { jobId: routeJobId } = useParams()
+  const draftKey = publicAccess ? DRAFT_KEY : `${DRAFT_KEY}-account`
   const user = useAuthStore(state => state.user)
   const token = useAuthStore(state => state.token)
-  const [draft, setDraft] = useState(loadDraft)
+  const [draft, setDraft] = useState(() => loadDraft(draftKey))
   const [busy, setBusy] = useState(false)
-  const [jobId, setJobId] = useState(null)
+  const [submittedJobId, setSubmittedJobId] = useState(null)
+  const jobId = publicAccess ? routeJobId || submittedJobId : submittedJobId
   const [jobTitle, setJobTitle] = useState('')
   const [failedRecipients, setFailedRecipients] = useState([])
   const [failedPage, setFailedPage] = useState(1)
@@ -70,18 +80,18 @@ export default function BulkCertificatesPage() {
   const csvInput = useRef(null)
   const finalizedJob = useRef(null)
   const storageWarningShown = useRef(false)
-  const { job, loading: polling } = useJobPolling(jobId)
+  const { job, loading: polling } = useJobPolling(jobId, publicAccess)
 
   useEffect(() => {
     try {
-      sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft))
+      sessionStorage.setItem(draftKey, JSON.stringify(draft))
     } catch {
       if (!storageWarningShown.current) {
         storageWarningShown.current = true
         toast.error('This browser could not save your bulk draft. Keep this tab open until you submit it.')
       }
     }
-  }, [draft])
+  }, [draft, draftKey])
 
   useEffect(() => {
     if (!jobId || !job || !['COMPLETED', 'PARTIALLY_FAILED', 'FAILED'].includes(job.status)) return
@@ -97,7 +107,8 @@ export default function BulkCertificatesPage() {
       if (job.failed_count > 0) {
         setFailedLoading(true)
         try {
-          const response = await getJobRecipients(jobId, { status: 'FAILED', page: 1, size: PAGE_SIZE })
+          const getRecipients = publicAccess ? getPublicJobRecipients : getJobRecipients
+          const response = await getRecipients(jobId, { status: 'FAILED', page: 1, size: PAGE_SIZE })
           if (!cancelled) setFailedRecipients(response.data.recipients)
         } catch (error) {
           if (!cancelled) {
@@ -115,7 +126,8 @@ export default function BulkCertificatesPage() {
 
       if (!cancelled && job.success_count > 0) {
         try {
-          await downloadAll(jobId, jobTitle)
+          const download = publicAccess ? downloadPublicAll : downloadAll
+          await download(jobId, jobTitle || job.title)
           if (!cancelled) toast.success(`ZIP downloaded with ${job.success_count} certificate(s).`)
         } catch (error) {
           if (!cancelled) toast.error(getApiErrorMessage(error, 'The job finished, but its ZIP could not be downloaded.'))
@@ -130,13 +142,14 @@ export default function BulkCertificatesPage() {
     return () => {
       cancelled = true
     }
-  }, [job, jobId, jobTitle])
+  }, [job, jobId, jobTitle, publicAccess])
 
   const loadFailedPage = async (page) => {
     setFailedLoading(true)
     setFailedLoadError('')
     try {
-      const response = await getJobRecipients(jobId, { status: 'FAILED', page, size: PAGE_SIZE })
+      const getRecipients = publicAccess ? getPublicJobRecipients : getJobRecipients
+      const response = await getRecipients(jobId, { status: 'FAILED', page, size: PAGE_SIZE })
       setFailedRecipients(response.data.recipients)
       setFailedPage(page)
       setFailedTotal(response.data.total)
@@ -205,7 +218,7 @@ export default function BulkCertificatesPage() {
   const handleGenerate = async (event) => {
     event.preventDefault()
     if (submitLock.current) return
-    if (!token) {
+    if (!publicAccess && !token) {
       toast.error('Sign in or create an account to submit and track a bulk certificate job.')
       navigate('/login', { state: { from: '/bulk-certificates' } })
       return
@@ -224,11 +237,12 @@ export default function BulkCertificatesPage() {
     setFailedRecipients([])
     setFailedTotal(0)
     setFailedLoadError('')
-    setJobId(null)
+    setSubmittedJobId(null)
     finalizedJob.current = null
     setJobTitle(draft.title.trim())
     try {
-      const response = await createJob({
+      const submitJob = publicAccess ? createPublicJob : createJob
+      const response = await submitJob({
         title: draft.title.trim(),
         recipients: draft.recipients.map(recipient => ({
           ...recipient,
@@ -238,7 +252,10 @@ export default function BulkCertificatesPage() {
           client_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
         })),
       })
-      setJobId(response.data.job_id)
+      setSubmittedJobId(response.data.job_id)
+      if (publicAccess) {
+        navigate(`/bulk-certificates/public/${response.data.job_id}`, { replace: true })
+      }
       toast.success(`Bulk job queued for ${response.data.valid_recipients} recipient(s).`)
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'Could not submit the bulk certificate job.'))
@@ -250,38 +267,62 @@ export default function BulkCertificatesPage() {
 
   const jobActive = jobId && (!job || !['COMPLETED', 'PARTIALLY_FAILED', 'FAILED'].includes(job.status))
   const signedIn = Boolean(token)
+  const effectiveJobTitle = jobTitle || job?.title || 'certificates'
+  const publicJobUrl = jobId ? `${window.location.origin}/bulk-certificates/public/${jobId}` : ''
 
   return (
-    <main className="min-h-screen bg-surface px-4 py-8 text-primary sm:px-8">
-      <div className="mx-auto max-w-7xl">
-        <header className="mb-8 flex flex-wrap items-start justify-between gap-4">
+    <main className="newsprint-page min-h-screen bg-surface px-4 py-6 text-primary sm:px-8 sm:py-8">
+      <div className="mx-auto max-w-screen-xl">
+        <header className="newsprint-masthead mb-6 flex flex-wrap items-end justify-between gap-5 pb-5">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-600">Bulk certificate generator</p>
-            <h1 className="mt-2 font-display text-3xl font-bold text-primary">Generate certificates in bulk</h1>
-            <p className="mt-2 max-w-3xl text-sm text-secondary">
+            <p className="newsprint-kicker mb-2">
+              {publicAccess ? 'No-account bulk generation' : 'Bulk certificate generator'}
+            </p>
+            <p className="edition-stamp mb-3">Certificate desk · Batch edition · {format(new Date(), 'dd MMM yyyy')}</p>
+            <h1 className="font-display text-4xl font-black leading-[0.95] tracking-tight text-primary sm:text-6xl">Generate certificates in bulk</h1>
+            <p className="mt-3 max-w-3xl font-body text-sm leading-relaxed text-secondary sm:text-base">
               Enter the event details and add as many recipients as needed. One request queues the batch;
               completed PDFs are packaged into a ZIP download.
             </p>
           </div>
-          <nav className="flex items-center gap-3 text-sm">
+          <nav className="flex flex-wrap items-center gap-3 text-sm">
+            {publicAccess
+              ? <Link className="btn-secondary px-4 py-2" to="/bulk-certificates">Account workspace</Link>
+              : <Link className="btn-secondary px-4 py-2" to="/bulk-certificates/public">Continue without an account</Link>}
             {signedIn
               ? <Link className="btn-secondary px-4 py-2" to="/dashboard/certificates">Dashboard</Link>
-              : <>
+              : !publicAccess && <>
                   <Link className="btn-secondary px-4 py-2" to="/login" state={{ from: '/bulk-certificates' }}>Sign in</Link>
                   <Link className="btn-primary px-4 py-2" to="/register" state={{ from: '/bulk-certificates' }}>Create account</Link>
                 </>}
           </nav>
         </header>
 
-        {!signedIn && (
-          <div className="mb-6 rounded-xl border border-surface-border bg-surface-card p-4 text-sm text-secondary">
+        <div className="newsprint-inverted newsprint-ticker mb-6" aria-hidden="true">
+          <div className="newsprint-ticker-track" aria-hidden="true">
+            {Array.from({ length: 2 }, (_, index) => (
+              <span key={index} className="newsprint-ticker-item">
+                One submission <span className="text-brand-400">◆</span> Independent recipient validation <span className="text-brand-400">◆</span> PDF certificates in a ZIP <span className="text-brand-400">◆</span>
+              </span>
+            ))}
+          </div>
+        </div>
+
+        {publicAccess && (
+          <div className="mb-6 border-l-4 border-brand-500 border-y border-r border-primary bg-surface-card p-4 font-body text-sm leading-relaxed text-secondary">
+            No account is needed to submit or download. Your private job link grants access to its progress, recipient details, and certificates; keep it private.
+          </div>
+        )}
+
+        {!publicAccess && !signedIn && (
+          <div className="mb-6 border-l-4 border-brand-500 border-y border-r border-primary bg-surface-card p-4 font-body text-sm leading-relaxed text-secondary">
             You can prepare the recipient list without signing in. Sign in or register when you generate;
             this page keeps your draft in this browser during that step.
           </div>
         )}
 
         <form onSubmit={handleGenerate} className="space-y-6">
-          <section className="rounded-2xl border border-surface-border bg-surface-card p-5 sm:p-6">
+          <section className="border border-primary bg-surface-card p-5 sm:p-6">
             <label className="grid max-w-2xl gap-2">
               <span className="text-xs font-bold uppercase tracking-wide text-secondary">Event or job title</span>
               <input
@@ -295,7 +336,7 @@ export default function BulkCertificatesPage() {
             </label>
           </section>
 
-          <section className="overflow-hidden rounded-2xl border border-surface-border bg-surface-card">
+          <section className="overflow-hidden border border-primary bg-surface-card">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-surface-border p-5">
               <div>
                 <h2 className="font-display text-lg font-semibold text-primary">Recipients</h2>
@@ -382,10 +423,25 @@ export default function BulkCertificatesPage() {
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h2 className="font-display text-lg font-semibold text-primary">Batch status: {job?.status || 'PENDING'}</h2>
-                <p className="mt-1 text-sm text-secondary">{jobTitle} · Job ID {jobId}</p>
+                <p className="mt-1 text-sm text-secondary">{effectiveJobTitle} · Job ID {jobId}</p>
               </div>
               {(polling || jobActive || resultLoading || failedLoading) && <span className="text-sm text-secondary">{failedLoading || resultLoading ? 'Preparing results and ZIP…' : 'Refreshing progress…'}</span>}
             </div>
+            {publicAccess && (
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(publicJobUrl)
+                    toast.success('Private tracking link copied.')
+                  } catch {
+                    toast.error('Could not copy the tracking link; copy the URL from your browser.')
+                  }
+                }}
+                className="btn-secondary mt-4 px-3 py-2 text-sm">
+                Copy private tracking link
+              </button>
+            )}
             {job && (
               <>
                 <div className="mt-4 h-2 overflow-hidden rounded-full bg-surface">
@@ -432,7 +488,7 @@ export default function BulkCertificatesPage() {
               </div>
             )}
             {job?.success_count > 0 && !jobActive && !resultLoading && (
-              <button type="button" onClick={() => downloadAll(jobId, jobTitle).catch(error =>
+              <button type="button" onClick={() => (publicAccess ? downloadPublicAll : downloadAll)(jobId, effectiveJobTitle).catch(error =>
                 toast.error(getApiErrorMessage(error, 'Could not download the ZIP.'))
               )} className="btn-secondary mt-5 px-4 py-2 text-sm">
                 Download ZIP again
@@ -442,7 +498,9 @@ export default function BulkCertificatesPage() {
         )}
 
         <footer className="mt-8 text-center text-xs text-secondary">
-          {user ? `Signed in as ${user.email}` : 'Bulk generation requires an account so you can track and retrieve your results.'}
+          {publicAccess
+            ? 'No account is required. Keep your private job URL to return to these results.'
+            : user ? `Signed in as ${user.email}` : 'Sign in to submit and track account-owned bulk jobs.'}
         </footer>
       </div>
     </main>

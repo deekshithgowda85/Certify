@@ -32,13 +32,18 @@ The normal Compose startup runs Alembic migrations automatically. OpenAPI docume
 - `GET /api/v1/jobs/{job_id}/recipients`: paginate results and optionally filter by `PENDING`, `SUCCESS`, or `FAILED`.
 - `GET /api/v1/jobs/{job_id}/certificates/download-all`: download successful PDFs as a ZIP.
 - `GET /api/v1/jobs/{job_id}/certificates/{recipient_id}`: download one successful PDF.
+- `POST /api/v1/public/jobs`: submit an account-free bulk job.
+- `GET /api/v1/public/jobs/{job_id}` and `GET /api/v1/public/jobs/{job_id}/recipients`: track a public job using its private job URL.
+- `GET /api/v1/public/jobs/{job_id}/certificates/download-all` and `GET /api/v1/public/jobs/{job_id}/certificates/{recipient_id}`: retrieve public job PDFs.
 - `GET /api/v1/health`: report database and Redis health.
 
-All job routes are scoped to the authenticated owner. Stored file paths are resolved inside `STORAGE_PATH`; paths outside that root are rejected.
+Authenticated job routes are scoped to the signed-in owner. Public job routes only expose jobs with no account owner and require the unguessable job ID. Stored file paths are resolved inside `STORAGE_PATH`; paths outside that root are rejected.
 
 ## Request safety
 
-Default Redis limits are 5 login requests and 5 registrations per minute per direct client IP, and 10 job submissions per minute per authenticated user. The API emits `429` with `Retry-After` and rate-limit headers. Limits are configured by `AUTH_RATE_LIMIT_PER_MINUTE`, `JOB_RATE_LIMIT_PER_MINUTE`, and `RATE_LIMIT_WINDOW_SECONDS`. Redis unavailability fails closed with JSON `503`.
+Default Redis limits are 5 login requests and 5 registrations per minute per direct client IP, 10 job submissions per minute per authenticated user, and 3 anonymous job submissions per minute per direct client IP. The API emits `429` with `Retry-After` and rate-limit headers. Limits are configured by `AUTH_RATE_LIMIT_PER_MINUTE`, `JOB_RATE_LIMIT_PER_MINUTE`, `PUBLIC_JOB_RATE_LIMIT_PER_MINUTE`, and `RATE_LIMIT_WINDOW_SECONDS`. Redis unavailability fails closed with JSON `503`.
+
+Anonymous bulk endpoints are under `/api/v1/public/jobs`. A random job UUID acts as a bearer capability for status, recipient details, PDFs, and the ZIP; the public UI warns users to keep that URL private. Public jobs are excluded from authenticated job listing and are not accessible through authenticated job routes.
 
 Job creation accepts `Idempotency-Key`. The same key and JSON payload return the original result without enqueuing again; reusing a key with a different payload returns `409`. The key and payload fingerprint are persisted in the jobs table by migration `003_job_idempotency`.
 

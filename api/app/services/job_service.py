@@ -66,7 +66,7 @@ def request_fingerprint(title: str, raw_recipients: list[Any]) -> str:
 
 async def _replayed_job(
     session: AsyncSession,
-    user_id: uuid.UUID,
+    user_id: Optional[uuid.UUID],
     idempotency_key: str,
     fingerprint: str,
 ) -> Optional[CreatedJob]:
@@ -94,11 +94,13 @@ async def create_job(
     session: AsyncSession,
     title: str,
     raw_recipients: list[Any],
-    user_id: uuid.UUID,
+    user_id: Optional[uuid.UUID],
     idempotency_key: Optional[str] = None,
     fingerprint: Optional[str] = None,
 ) -> CreatedJob:
     if idempotency_key is not None:
+        if user_id is None:
+            raise ValueError("Idempotency keys require an authenticated job owner")
         if fingerprint is None:
             raise ValueError("fingerprint is required when an idempotency key is provided")
         replay = await _replayed_job(session, user_id, idempotency_key, fingerprint)
@@ -199,6 +201,13 @@ async def get_job(session: AsyncSession, job_id: str, user_id: uuid.UUID) -> Opt
     if parsed is None:
         return None
     return await session.scalar(select(Job).where(Job.id == parsed, Job.user_id == user_id))
+
+
+async def get_public_job(session: AsyncSession, job_id: str) -> Optional[Job]:
+    parsed = parse_uuid(job_id)
+    if parsed is None:
+        return None
+    return await session.scalar(select(Job).where(Job.id == parsed, Job.user_id.is_(None)))
 
 
 async def list_jobs(session: AsyncSession, user_id: uuid.UUID) -> list[tuple[Job, Optional[uuid.UUID]]]:

@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
-import { getJob } from '../api/certificates'
+import { getJob, getPublicJob } from '../api/certificates'
 import { getApiErrorMessage } from '../api/errors'
 
 const TERMINAL = ['COMPLETED', 'FAILED', 'PARTIALLY_FAILED']
 
-export function useJobPolling(jobId) {
+export function useJobPolling(jobId, publicAccess = false) {
   const [job,     setJob]     = useState(null)
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState(null)
@@ -23,7 +23,7 @@ export function useJobPolling(jobId) {
       if (polling) return
       polling = true
       try {
-        const res = await getJob(jobId)
+        const res = await (publicAccess ? getPublicJob(jobId) : getJob(jobId))
         if (cancelled) return
         setJob(res.data)
         setError(null)
@@ -54,7 +54,7 @@ export function useJobPolling(jobId) {
       cancelled = true
       clearInterval(timer)
     }
-  }, [jobId])
+  }, [jobId, publicAccess])
 
   return { job, loading, error }
 }

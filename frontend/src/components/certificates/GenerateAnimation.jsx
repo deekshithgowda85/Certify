@@ -6,7 +6,7 @@ import { useAuthStore } from '../../store/authStore'
 import toast from 'react-hot-toast'
 
 function ConfettiBurst() {
-  const colors  = ['#e60000', '#0d0d0d', '#6d6d6d']
+  const colors  = ['#cc0000', '#111111', '#737373']
   const pieces  = Array.from({ length: 20 }, (_, i) => ({
     id: i,
     color: colors[i % colors.length],
@@ -34,7 +34,7 @@ function ConfettiBurst() {
 function ProgressBar({ value }) {
   return (
     <div className="w-full bg-surface rounded-full h-2 overflow-hidden">
-      <motion.div className="h-full bg-brand-600 rounded-full"
+      <motion.div className="h-full bg-brand-600"
         initial={{ width: 0 }}
         animate={{ width: `${value}%` }}
         transition={{ duration: 0.6, ease: 'easeOut' }} />
@@ -124,10 +124,10 @@ export default function GenerateAnimation({ jobId, recipientId, onClose }) {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
       <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
         transition={{ type: 'spring', stiffness: 260, damping: 20 }}
-        className="relative bg-surface-card border border-surface-border rounded-2xl p-8
+        className="hard-shadow-hover relative bg-surface-card border border-primary border-b-4 p-6 sm:p-8
                    w-full max-w-md text-center overflow-hidden">
 
         <JobSteps status={status} mode={mode} />

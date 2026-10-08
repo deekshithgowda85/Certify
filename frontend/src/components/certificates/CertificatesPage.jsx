@@ -134,26 +134,37 @@ export default function CertificatesPage() {
   }
 
   return (
-    <div className="p-8">
+    <div className="newsprint-page mx-auto max-w-screen-xl p-4 sm:p-6 lg:p-8">
 
       {/* Header */}
-      <div className="mb-10 flex items-end justify-between gap-4">
+      <header className="newsprint-masthead mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h2 className="font-display font-bold text-2xl text-white mb-1">Certificates</h2>
-          <p className="text-slate-400 text-sm">Choose a course or add a fully custom certificate job.</p>
+          <p className="newsprint-kicker mb-2">The certificate desk · Vol. 01</p>
+          <h2 className="font-display text-4xl font-black leading-none tracking-tight text-white sm:text-5xl">Certificates</h2>
+          <p className="mt-3 max-w-2xl font-body text-sm leading-relaxed text-slate-400 sm:text-base">Choose a course or add a fully custom certificate job.</p>
         </div>
-        <button type="button" onClick={() => setManualOpen(true)} disabled={generationLocked} className="btn-primary px-4 py-2.5 text-sm whitespace-nowrap disabled:opacity-50">
+        <button type="button" onClick={() => setManualOpen(true)} disabled={generationLocked} className="btn-primary whitespace-nowrap disabled:opacity-50">
           + New certificate
         </button>
+      </header>
+
+      <div className="newsprint-inverted newsprint-ticker mb-8" aria-hidden="true">
+        <div className="newsprint-ticker-track" aria-hidden="true">
+          {Array.from({ length: 2 }, (_, index) => (
+            <span key={index} className="newsprint-ticker-item">
+              Issue with clarity <span className="text-brand-400">◆</span> Track every job <span className="text-brand-400">◆</span> Download every record <span className="text-brand-400">◆</span>
+            </span>
+          ))}
+        </div>
       </div>
 
       {/* Course grid */}
       <section className="mb-12">
-        <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-5">
-          Available Courses
+        <h3 className="mb-4 border-b border-primary pb-3 font-mono text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+          01 / Available Courses
         </h3>
         <motion.div variants={container} initial="hidden" animate="show"
-          className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          className="grid grid-cols-1 gap-px border border-primary bg-primary sm:grid-cols-2 lg:grid-cols-4">
           {COURSES.map(course => (
             <motion.div key={course.id} variants={item}>
               <CourseCard
@@ -170,11 +181,11 @@ export default function CertificatesPage() {
       {/* Past certificates */}
       {jobs.length > 0 && (
         <section>
-          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-5">
-            Your Certificates
+          <h3 className="mb-4 border-b border-primary pb-3 font-mono text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+            02 / Your Certificates
           </h3>
           <motion.div variants={container} initial="hidden" animate="show"
-            className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            className="grid grid-cols-1 gap-px border border-primary bg-primary sm:grid-cols-2 lg:grid-cols-4">
             {jobs.map(job => (
               <motion.div key={job.job_id} variants={item}>
                 <CertificateCard job={job} />

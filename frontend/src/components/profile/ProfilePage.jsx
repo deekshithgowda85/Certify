@@ -59,11 +59,15 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="min-h-full w-full p-4 sm:p-6 lg:p-8">
-      <h2 className="font-display font-bold text-2xl text-white mb-8">Profile</h2>
+    <div className="newsprint-page mx-auto min-h-full w-full max-w-screen-xl p-4 sm:p-6 lg:p-8">
+      <header className="newsprint-masthead mb-8">
+        <p className="newsprint-kicker mb-2">Account records · Vol. 01</p>
+        <h2 className="font-display text-4xl font-black leading-none tracking-tight text-white sm:text-5xl">Profile</h2>
+        <p className="mt-3 font-body text-sm text-slate-400">Your account details and certificate ledger.</p>
+      </header>
 
       {/* Identity card */}
-      <div className="bg-surface-card border border-surface-border rounded-2xl p-8 mb-6">
+      <div className="hard-shadow-hover mb-6 border border-primary border-b-4 bg-surface-card p-5 sm:p-8">
         <div className="flex items-start gap-6">
           <Avatar name={me?.full_name} />
 
@@ -101,17 +105,17 @@ export default function ProfilePage() {
                     {me?.full_name || '—'}
                   </h3>
                   <button onClick={startEdit}
-                    className="btn-quiet px-2 py-1 text-sm"
+                    className="btn-quiet px-3 py-2 text-xs"
                     title="Edit name">
-                    ✏️
+                    Edit
                   </button>
                 </motion.div>
               )}
             </AnimatePresence>
 
-            <p className="text-slate-400 text-sm mb-1">{me?.email}</p>
+            <p className="font-mono text-sm text-slate-400 mb-1">{me?.email}</p>
             {me?.created_at && (
-              <p className="text-slate-600 text-xs">
+              <p className="edition-stamp">
                 Member since {format(new Date(me.created_at), 'MMMM yyyy')}
               </p>
             )}
@@ -120,7 +124,7 @@ export default function ProfilePage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-px border border-primary bg-primary sm:grid-cols-3">
         <StatsCard icon="📋" label="Total Jobs"            value={totalJobs}   color="brand"  />
         <StatsCard icon="🏆" label="Certificates Generated" value={totalCerts}  color="green"  />
         <StatsCard icon="⏳" label="Currently Processing"   value={processing}  color="yellow" />
@@ -129,8 +133,8 @@ export default function ProfilePage() {
       <section className="mt-10">
         <div className="flex items-end justify-between gap-4 mb-5">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-600">Certificate history</p>
-            <h3 className="font-display text-xl text-primary mt-1">All certificates</h3>
+            <p className="newsprint-kicker">Certificate history</p>
+            <h3 className="font-display text-2xl font-bold text-primary mt-1">All certificates</h3>
           </div>
           <span className="text-sm text-secondary">{jobs.length} total</span>
         </div>
@@ -139,7 +143,7 @@ export default function ProfilePage() {
             {jobs.map(job => <CertificateCard key={job.job_id} job={job} />)}
           </div>
         ) : (
-          <div className="bg-surface-card border border-surface-border rounded-md p-6 text-sm text-secondary">
+          <div className="border border-primary bg-surface-card p-6 font-body text-sm text-secondary">
             Your certificate history will appear here after your first job is added.
           </div>
         )}

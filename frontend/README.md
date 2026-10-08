@@ -4,7 +4,8 @@ React/Vite application for registration, login, certificate creation and downloa
 
 ## Features
 
-- Responsive black-and-white application theme and animated dashboard components.
+- Responsive Newsprint design system: warm paper texture, ink-black grid rules, Playfair/Lora typography, editorial-red accents, and hard-shadow card hovers.
+- Shared design tokens, sharp-corner controls, keyboard focus styles, and reduced-motion support across authentication, dashboard, bulk-generation, profile, and metrics routes.
 - Course templates and a manual certificate job form.
 - A standalone `/bulk-certificates` page with an editable recipient table, add/remove row controls, a 10-row shortcut, per-row course/date fields, CSV import (comma-separated headers: `name,email,course_name,completion_date`), progress/results, and automatic ZIP download after the bulk job completes.
 - CSV import replaces the current recipient table and accepts up to 10,000 participants; a downloadable CSV template is provided. Use ISO completion dates (`YYYY-MM-DD`) for best compatibility.
@@ -20,9 +21,11 @@ React/Vite application for registration, login, certificate creation and downloa
 
 - `/login`: sign in.
 - `/register`: create an account and sign in.
-- `/bulk-certificates`: prepare a multi-recipient job and download successful PDFs as a ZIP.
+- `/bulk-certificates`: prepare a multi-recipient authenticated job and download successful PDFs as a ZIP.
+- `/bulk-certificates/public`: submit and track a bulk job without an account; its unguessable URL is a private bearer link for job progress, recipient details, and downloads.
 - `/dashboard/certificates`: select a course or submit a custom certificate job.
 - `/dashboard/profile`: edit profile and review job history/statistics.
+- `/dashboard/bulk-certificates`: authenticated bulk workspace inside the dashboard.
 - `/admin/metrics`: view service, queue, and sandbox metrics.
 
 ## Development

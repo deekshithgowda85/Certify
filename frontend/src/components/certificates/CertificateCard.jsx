@@ -29,18 +29,17 @@ export default function CertificateCard({ job }) {
   }
 
   return (
-    <motion.div whileHover={{ y: -4, scale: 1.02 }} transition={{ type: 'spring', stiffness: 300, damping: 22 }}
-      className="bg-surface-card border border-surface-border rounded-2xl p-5 flex flex-col gap-3">
+    <motion.div className="hard-shadow-hover bg-surface-card p-5 flex flex-col gap-3">
 
       <div className="flex items-start justify-between gap-2">
         <h4 className="font-display font-semibold text-white text-sm leading-snug">{job.title}</h4>
-        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border flex-shrink-0
+        <span className={`border px-2 py-1 font-mono text-[10px] font-semibold uppercase tracking-wider flex-shrink-0
                           ${statusColor[job.status] ?? statusColor.PENDING}`}>
           {job.status}
         </span>
       </div>
 
-      <div className="text-xs text-slate-500 space-y-1">
+      <div className="space-y-1 font-mono text-xs text-slate-500">
         <p>Mode: <span className="text-slate-400">{job.processing_mode ?? '—'}</span></p>
         <p>Generated: <span className="text-slate-400">
           {job.created_at ? format(new Date(job.created_at), 'dd MMM yyyy') : '—'}

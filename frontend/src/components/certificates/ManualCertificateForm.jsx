@@ -50,11 +50,11 @@ export default function ManualCertificateForm({ user, busy, onClose, onSubmit })
       onMouseDown={event => event.target === event.currentTarget && onClose()}>
       <motion.div
         initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-lg max-h-[calc(100vh-2rem)] overflow-y-auto bg-surface-card border border-surface-border rounded-2xl p-6 shadow-xl">
+        className="hard-shadow-hover w-full max-w-lg max-h-[calc(100vh-2rem)] overflow-y-auto bg-surface-card border border-primary border-b-4 p-6">
         <div className="flex items-start justify-between gap-4 mb-6">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-600">New certificate</p>
-            <p className="text-sm text-secondary mt-2">Enter the recipient and completion details yourself.</p>
+            <p className="newsprint-kicker">New certificate</p>
+            <p className="mt-2 font-body text-sm text-secondary">Enter the recipient and completion details yourself.</p>
           </div>
           <button type="button" onClick={onClose} className="btn-quiet px-2 py-1 text-sm" aria-label="Close form">
             X
@@ -64,7 +64,7 @@ export default function ManualCertificateForm({ user, busy, onClose, onSubmit })
         <form onSubmit={submit} className="grid gap-4">
           {fields.map(field => (
             <label key={field.name} className="grid gap-1.5">
-              <span className="text-xs font-bold uppercase tracking-[0.12em] text-secondary">{field.label}</span>
+              <span className="font-mono text-xs font-bold uppercase tracking-[0.12em] text-secondary">{field.label}</span>
               <input
                 name={field.name}
                 type={field.type || 'text'}

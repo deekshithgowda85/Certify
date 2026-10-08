@@ -40,6 +40,7 @@ export default function App() {
             <Route path="/login"    element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/bulk-certificates" element={<BulkCertificatesPage />} />
+            <Route path="/bulk-certificates/public/:jobId?" element={<BulkCertificatesPage publicAccess />} />
 
             <Route path="/dashboard" element={
               <ProtectedRoute><DashboardPage /></ProtectedRoute>
@@ -47,6 +48,7 @@ export default function App() {
               <Route index                element={<Navigate to="certificates" replace />} />
               <Route path="profile"       element={<ProfilePage />} />
               <Route path="certificates"  element={<CertificatesPage />} />
+              <Route path="bulk-certificates" element={<BulkCertificatesPage />} />
             </Route>
 
             <Route path="/admin/metrics" element={<MetricsPage />} />
@@ -61,14 +63,14 @@ export default function App() {
         containerStyle={{ bottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }}
         toastOptions={{
           style: {
-            background: '#ffffff',
-            color:      '#0d0d0d',
-            border:     '1px solid #d0d0d0',
-            borderRadius: '6px',
+            background: '#f9f9f7',
+            color:      '#111111',
+            border:     '1px solid #111111',
+            borderRadius: '0px',
             fontSize:   '14px',
           },
-          success: { iconTheme: { primary: '#e60000', secondary: '#ffffff' } },
-          error:   { iconTheme: { primary: '#e60000', secondary: '#ffffff' } },
+          success: { iconTheme: { primary: '#cc0000', secondary: '#f9f9f7' } },
+          error:   { iconTheme: { primary: '#cc0000', secondary: '#f9f9f7' } },
         }} />
     </QueryClientProvider>
   )
