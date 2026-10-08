@@ -2,6 +2,8 @@
 
 Generate and retrieve personalized PDF certificates from a validated recipient list.
 
+![Certify bulk certificate generator architecture](docs/architecture.png)
+
 [![Python 3.11](https://img.shields.io/badge/Python-3.11-blue)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111.0-009688)](https://fastapi.tiangolo.com/)
 [![Celery](https://img.shields.io/badge/Celery-5.4.0-green)](https://docs.celeryq.dev/)
