@@ -12,11 +12,20 @@ export const createJob = (d) => api.post('/api/v1/jobs', d, {
   headers: { 'Idempotency-Key': newIdempotencyKey() },
 })
 export const createPublicJob = (d) => api.post('/api/v1/public/jobs', d)
+export const createBatch = (d) => api.post('/api/v1/jobs/batches', d, {
+  headers: { 'Idempotency-Key': newIdempotencyKey() },
+  timeout: 120000,
+})
+export const createPublicBatch = (d) => api.post('/api/v1/public/batches', d, { timeout: 120000 })
 export const getJob    = (id) => api.get(`/api/v1/jobs/${id}`)
 export const getPublicJob = (id) => api.get(`/api/v1/public/jobs/${id}`)
+export const getBatch = (id) => api.get(`/api/v1/jobs/batches/${id}`)
+export const getPublicBatch = (id) => api.get(`/api/v1/public/batches/${id}`)
 export const getJobs   = ()  => api.get('/api/v1/jobs')
 export const getJobRecipients = (id, params) => api.get(`/api/v1/jobs/${id}/recipients`, { params })
 export const getPublicJobRecipients = (id, params) => api.get(`/api/v1/public/jobs/${id}/recipients`, { params })
+export const getBatchRecipients = (id, params) => api.get(`/api/v1/jobs/batches/${id}/recipients`, { params })
+export const getPublicBatchRecipients = (id, params) => api.get(`/api/v1/public/batches/${id}/recipients`, { params })
 
 const downloadBlob = (blob, name) => {
   const url = window.URL.createObjectURL(blob)
@@ -75,8 +84,32 @@ async function downloadZip(path, title) {
   downloadBlob(response.data, `${title}_certificates.zip`)
 }
 
+async function downloadPdf(path, title) {
+  let response
+  try {
+    response = await api.get(path, { responseType: 'blob', timeout: 600000 })
+  } catch (error) {
+    const downloadError = new Error(await responseError(error), { cause: error })
+    downloadError.response = error.response
+    throw downloadError
+  }
+  const signature = await response.data.slice(0, 5).text()
+  if (signature !== '%PDF-') {
+    throw new Error('The server response is not a valid PDF file.')
+  }
+  downloadBlob(response.data, `${title}_certificates.pdf`)
+}
+
 export const downloadAll = (job_id, title) =>
   downloadZip(`/api/v1/jobs/${job_id}/certificates/download-all`, title)
 
 export const downloadPublicAll = (job_id, title) =>
   downloadZip(`/api/v1/public/jobs/${job_id}/certificates/download-all`, title)
+export const downloadBatchAll = (batch_id, title) =>
+  downloadPdf(`/api/v1/jobs/batches/${batch_id}/certificates/download-all`, title)
+export const downloadPublicBatchAll = (batch_id, title) =>
+  downloadPdf(`/api/v1/public/batches/${batch_id}/certificates/download-all`, title)
+export const regenerateBatch = (batch_id) =>
+  api.post(`/api/v1/jobs/batches/${batch_id}/regenerate`)
+export const regeneratePublicBatch = (batch_id) =>
+  api.post(`/api/v1/public/batches/${batch_id}/regenerate`)

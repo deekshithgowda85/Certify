@@ -66,6 +66,7 @@ def sync_engine():
     import app.models  # noqa: F401
 
     engine = create_engine(os.environ["DATABASE_URL"])
+    Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
     yield engine
     engine.dispose()
@@ -75,7 +76,10 @@ def sync_engine():
 def clean_db(sync_engine):
     with sync_engine.begin() as conn:
         existing_tables = set(inspect(conn).get_table_names())
-        tables = [name for name in ("recipients", "jobs", "users") if name in existing_tables]
+        tables = [
+            name for name in ("recipients", "jobs", "job_batches", "users")
+            if name in existing_tables
+        ]
         if tables:
             conn.execute(text(f"TRUNCATE TABLE {', '.join(tables)} RESTART IDENTITY CASCADE"))
     yield

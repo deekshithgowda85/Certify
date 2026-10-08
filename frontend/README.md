@@ -7,11 +7,11 @@ React/Vite application for registration, login, certificate creation and downloa
 - Responsive Newsprint design system: warm paper texture, ink-black grid rules, Playfair/Lora typography, editorial-red accents, and hard-shadow card hovers.
 - Shared design tokens, sharp-corner controls, keyboard focus styles, and reduced-motion support across authentication, dashboard, bulk-generation, profile, and metrics routes.
 - Course templates and a manual certificate job form.
-- A standalone `/bulk-certificates` page with an editable recipient table, add/remove row controls, a 10-row shortcut, per-row course/date fields, CSV import (comma-separated headers: `name,email,course_name,completion_date`), progress/results, and automatic ZIP download after the bulk job completes.
-- CSV import replaces the current recipient table and accepts up to 10,000 participants; a downloadable CSV template is provided. Use ISO completion dates (`YYYY-MM-DD`) for best compatibility.
-- Bulk drafts are kept in the current browser session when a visitor signs in or registers before submission.
+- A standalone `/bulk-certificates` page with recipient and failed-result pagination at 50 rows per page, add/remove row controls, per-row course/date fields, CSV import (`name,email,course_name,completion_date`), batch progress/results, and user-triggered merged-PDF download.
+- CSV import replaces the current recipient table and accepts up to 100,000 participants. Submissions are split into queue jobs of at most 10,000 participants each; a downloadable CSV template is provided. Use ISO completion dates (`YYYY-MM-DD`) for best compatibility.
+- Smaller bulk drafts are kept in the current browser session when a visitor signs in or registers before submission. Large lists stay in memory only, so keep the tab open until submission.
 - A synchronous generation lock prevents multiple concurrent submissions from the page.
-- Job status/progress polling, certificate history, PDF downloads, and bulk ZIP downloads.
+- Job and batch status/progress polling, certificate history, individual PDF downloads, and merged batch-PDF downloads.
 - Profile editing and generated/processing job statistics.
 - Metrics dashboard for API/worker health, queue activity, and sandbox pool slots.
 - Bottom-center success/error toasts; shared request error formatting for validation, rate limits, network failures, and server errors.
@@ -21,11 +21,13 @@ React/Vite application for registration, login, certificate creation and downloa
 
 - `/login`: sign in.
 - `/register`: create an account and sign in.
-- `/bulk-certificates`: prepare a multi-recipient authenticated job and download successful PDFs as a ZIP.
-- `/bulk-certificates/public`: submit and track a bulk job without an account; its unguessable URL is a private bearer link for job progress, recipient details, and downloads.
+- `/bulk-certificates`: prepare an authenticated batch of up to 100,000 participants and download successful certificates as one PDF.
+- `/bulk-certificates/public`: submit and track an account-free batch; its unguessable URL is a private bearer link for progress, recipient details, and the merged PDF.
 - `/dashboard/certificates`: select a course or submit a custom certificate job.
 - `/dashboard/profile`: edit profile and review job history/statistics.
 - `/dashboard/bulk-certificates`: authenticated bulk workspace inside the dashboard.
+- Login offers both the account-owned bulk generator and the no-account public generator.
+- Generated PDFs are removed from storage after 10 minutes; expired completed batches can be regenerated from their saved recipients.
 - `/admin/metrics`: view service, queue, and sandbox metrics.
 
 ## Development

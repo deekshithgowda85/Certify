@@ -1,14 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
-import { getJob, getPublicJob } from '../api/certificates'
+import { getBatch, getJob, getPublicBatch, getPublicJob } from '../api/certificates'
 import { getApiErrorMessage } from '../api/errors'
 
 const TERMINAL = ['COMPLETED', 'FAILED', 'PARTIALLY_FAILED']
 
-export function useJobPolling(jobId, publicAccess = false) {
+export function useJobPolling(jobId, publicAccess = false, batchMode = false) {
   const [job,     setJob]     = useState(null)
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState(null)
+  const [pollingGeneration, setPollingGeneration] = useState(0)
+  const restartPolling = useCallback(() => setPollingGeneration(value => value + 1), [])
 
   useEffect(() => {
     if (!jobId) return
@@ -23,7 +25,10 @@ export function useJobPolling(jobId, publicAccess = false) {
       if (polling) return
       polling = true
       try {
-        const res = await (publicAccess ? getPublicJob(jobId) : getJob(jobId))
+        const getStatus = batchMode
+          ? (publicAccess ? getPublicBatch : getBatch)
+          : (publicAccess ? getPublicJob : getJob)
+        const res = await getStatus(jobId)
         if (cancelled) return
         setJob(res.data)
         setError(null)
@@ -54,7 +59,7 @@ export function useJobPolling(jobId, publicAccess = false) {
       cancelled = true
       clearInterval(timer)
     }
-  }, [jobId, publicAccess])
+  }, [jobId, publicAccess, batchMode, pollingGeneration])
 
-  return { job, loading, error }
+  return { job, loading, error, restartPolling }
 }

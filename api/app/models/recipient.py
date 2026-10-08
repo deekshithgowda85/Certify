@@ -3,7 +3,7 @@ import uuid
 from datetime import date, datetime
 from typing import Optional
 
-from sqlalchemy import Date, DateTime, ForeignKey, Index, String, Text, Uuid, func
+from sqlalchemy import Date, DateTime, ForeignKey, Index, Integer, String, Text, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -23,6 +23,7 @@ class Recipient(Base):
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    source_index: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     job_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False
     )

@@ -107,8 +107,13 @@ export default function LoginPage() {
         </div>
         <p className="mt-5 text-center font-body text-sm text-slate-500">
           Need to issue certificates for a group?{' '}
+          <Link to="/bulk-certificates" state={{ from: '/bulk-certificates' }} className="text-brand-400 hover:text-brand-300 font-medium">
+            Open the bulk certificate generator
+          </Link>
+        </p>
+        <p className="mt-2 text-center font-body text-sm text-slate-500">
           <Link to="/bulk-certificates/public" className="text-brand-400 hover:text-brand-300 font-medium">
-            Generate without an account
+            Continue without an account
           </Link>
         </p>
         <AuthQuickLinks />

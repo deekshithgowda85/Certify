@@ -38,6 +38,8 @@ services:
     env_file: .env
     environment:
       SANDBOX_MAX_CONTAINERS: ${SANDBOX_MAX_CONTAINERS:-5}
+      CERTIFICATE_TTL_SECONDS: ${CERTIFICATE_TTL_SECONDS:-600}
+      CERTIFICATE_CLEANUP_INTERVAL_SECONDS: ${CERTIFICATE_CLEANUP_INTERVAL_SECONDS:-60}
     volumes:
       - ./api/app:/app/app
       - ./alembic:/app/alembic

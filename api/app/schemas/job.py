@@ -38,6 +38,47 @@ class JobCreateRequest(BaseModel):
     )
 
 
+class JobBatchCreateRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+    recipients: list[Any] = Field(min_length=1, max_length=100000)
+
+    @field_validator("title")
+    @classmethod
+    def _strip_title(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("title must not be blank")
+        return value
+
+
+class JobBatchCreateResponse(BaseModel):
+    batch_id: uuid.UUID
+    status: Literal["PENDING", "FAILED"]
+    total_recipients: int
+    valid_recipients: int
+    invalid_recipients: int
+    job_count: int
+
+
+class JobBatchRegenerateResponse(BaseModel):
+    batch_id: uuid.UUID
+    status: Literal["PENDING"]
+    recipients_to_regenerate: int
+    job_count: int
+
+
+class JobBatchResponse(BaseModel):
+    job_id: uuid.UUID
+    title: str
+    status: Literal["PENDING", "PROCESSING", "COMPLETED", "PARTIALLY_FAILED", "FAILED"]
+    total_recipients: int
+    processed_count: int
+    success_count: int
+    failed_count: int
+    created_at: datetime
+    updated_at: datetime
+
+
 class JobCreateResponse(BaseModel):
     job_id: uuid.UUID
     status: Literal["PENDING"]

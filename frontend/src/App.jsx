@@ -39,7 +39,7 @@ export default function App() {
             <Route path="/"         element={<Navigate to="/login" replace />} />
             <Route path="/login"    element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
-            <Route path="/bulk-certificates" element={<BulkCertificatesPage />} />
+            <Route path="/bulk-certificates/:jobId?" element={<BulkCertificatesPage />} />
             <Route path="/bulk-certificates/public/:jobId?" element={<BulkCertificatesPage publicAccess />} />
 
             <Route path="/dashboard" element={
@@ -48,7 +48,7 @@ export default function App() {
               <Route index                element={<Navigate to="certificates" replace />} />
               <Route path="profile"       element={<ProfilePage />} />
               <Route path="certificates"  element={<CertificatesPage />} />
-              <Route path="bulk-certificates" element={<BulkCertificatesPage />} />
+              <Route path="bulk-certificates/:jobId?" element={<BulkCertificatesPage />} />
             </Route>
 
             <Route path="/admin/metrics" element={<MetricsPage />} />

@@ -3,12 +3,14 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { format } from 'date-fns'
 import {
-  createJob,
-  createPublicJob,
-  downloadAll,
-  downloadPublicAll,
-  getJobRecipients,
-  getPublicJobRecipients,
+  createBatch,
+  createPublicBatch,
+  downloadBatchAll,
+  downloadPublicBatchAll,
+  getBatchRecipients,
+  getPublicBatchRecipients,
+  regenerateBatch,
+  regeneratePublicBatch,
 } from '../api/certificates'
 import { getApiErrorMessage } from '../api/errors'
 import { parseRecipientCsv } from '../utils/recipientCsv'
@@ -16,9 +18,11 @@ import { useAuthStore } from '../store/authStore'
 import { useJobPolling } from '../hooks/useJobPolling'
 
 const DRAFT_KEY = 'bulk-certificate-draft'
-const MAX_RECIPIENTS = 10000
+const MAX_RECIPIENTS = 100000
 const MAX_CSV_BYTES = 20 * 1024 * 1024
-const PAGE_SIZE = 100
+const PAGE_SIZE = 50
+const RECIPIENT_PAGE_SIZE = 50
+const MAX_SAVED_DRAFT_RECIPIENTS = 5000
 
 function today() {
   return format(new Date(), 'yyyy-MM-dd')
@@ -68,7 +72,7 @@ export default function BulkCertificatesPage({ publicAccess = false }) {
   const [draft, setDraft] = useState(() => loadDraft(draftKey))
   const [busy, setBusy] = useState(false)
   const [submittedJobId, setSubmittedJobId] = useState(null)
-  const jobId = publicAccess ? routeJobId || submittedJobId : submittedJobId
+  const jobId = routeJobId || submittedJobId
   const [jobTitle, setJobTitle] = useState('')
   const [failedRecipients, setFailedRecipients] = useState([])
   const [failedPage, setFailedPage] = useState(1)
@@ -76,13 +80,42 @@ export default function BulkCertificatesPage({ publicAccess = false }) {
   const [failedLoading, setFailedLoading] = useState(false)
   const [failedLoadError, setFailedLoadError] = useState('')
   const [resultLoading, setResultLoading] = useState(false)
+  const [downloadLoading, setDownloadLoading] = useState(false)
+  const [regenerating, setRegenerating] = useState(false)
+  const [certificatesExpired, setCertificatesExpired] = useState(false)
+  const [recipientPage, setRecipientPage] = useState(1)
   const submitLock = useRef(false)
   const csvInput = useRef(null)
   const finalizedJob = useRef(null)
   const storageWarningShown = useRef(false)
-  const { job, loading: polling } = useJobPolling(jobId, publicAccess)
+  const { job, loading: polling, restartPolling } = useJobPolling(jobId, publicAccess, true)
+  const recipientPageCount = Math.max(1, Math.ceil(draft.recipients.length / RECIPIENT_PAGE_SIZE))
+  const visibleRecipients = draft.recipients.slice(
+    (recipientPage - 1) * RECIPIENT_PAGE_SIZE,
+    recipientPage * RECIPIENT_PAGE_SIZE
+  )
 
   useEffect(() => {
+    if (recipientPage > recipientPageCount) setRecipientPage(recipientPageCount)
+  }, [recipientPage, recipientPageCount])
+
+  useEffect(() => {
+    setCertificatesExpired(false)
+  }, [jobId])
+
+  useEffect(() => {
+    if (draft.recipients.length > MAX_SAVED_DRAFT_RECIPIENTS) {
+      try {
+        sessionStorage.removeItem(draftKey)
+      } catch {
+        // The draft remains available in memory for the current page session.
+      }
+      if (!storageWarningShown.current) {
+        storageWarningShown.current = true
+        toast.error('This large recipient list cannot be saved in browser storage. Keep this tab open until you submit it.')
+      }
+      return
+    }
     try {
       sessionStorage.setItem(draftKey, JSON.stringify(draft))
     } catch {
@@ -107,7 +140,7 @@ export default function BulkCertificatesPage({ publicAccess = false }) {
       if (job.failed_count > 0) {
         setFailedLoading(true)
         try {
-          const getRecipients = publicAccess ? getPublicJobRecipients : getJobRecipients
+          const getRecipients = publicAccess ? getPublicBatchRecipients : getBatchRecipients
           const response = await getRecipients(jobId, { status: 'FAILED', page: 1, size: PAGE_SIZE })
           if (!cancelled) setFailedRecipients(response.data.recipients)
         } catch (error) {
@@ -124,16 +157,8 @@ export default function BulkCertificatesPage({ publicAccess = false }) {
         }
       }
 
-      if (!cancelled && job.success_count > 0) {
-        try {
-          const download = publicAccess ? downloadPublicAll : downloadAll
-          await download(jobId, jobTitle || job.title)
-          if (!cancelled) toast.success(`ZIP downloaded with ${job.success_count} certificate(s).`)
-        } catch (error) {
-          if (!cancelled) toast.error(getApiErrorMessage(error, 'The job finished, but its ZIP could not be downloaded.'))
-        }
-      } else if (!cancelled) {
-        toast.error('No certificates were generated successfully, so there is no ZIP to download.')
+      if (!cancelled && job.success_count === 0) {
+        toast.error('No certificates were generated successfully, so there is no PDF to download.')
       }
       if (!cancelled) setResultLoading(false)
     }
@@ -148,7 +173,7 @@ export default function BulkCertificatesPage({ publicAccess = false }) {
     setFailedLoading(true)
     setFailedLoadError('')
     try {
-      const getRecipients = publicAccess ? getPublicJobRecipients : getJobRecipients
+      const getRecipients = publicAccess ? getPublicBatchRecipients : getBatchRecipients
       const response = await getRecipients(jobId, { status: 'FAILED', page, size: PAGE_SIZE })
       setFailedRecipients(response.data.recipients)
       setFailedPage(page)
@@ -175,7 +200,7 @@ export default function BulkCertificatesPage({ publicAccess = false }) {
     setDraft(current => {
       const available = MAX_RECIPIENTS - current.recipients.length
       const amount = Math.min(count, available)
-      if (amount < count) toast.error(`A batch can contain at most ${MAX_RECIPIENTS.toLocaleString()} recipients.`)
+      if (amount < count) toast.error(`A submission can contain at most ${MAX_RECIPIENTS.toLocaleString()} participants.`)
       return { ...current, recipients: [...current.recipients, ...Array.from({ length: amount }, newRecipient)] }
     })
   }
@@ -198,6 +223,7 @@ export default function BulkCertificatesPage({ publicAccess = false }) {
       if (file.size > MAX_CSV_BYTES) throw new Error('The CSV file must be smaller than 20 MB.')
       const recipients = parseRecipientCsv(await file.text(), MAX_RECIPIENTS)
       setDraft(current => ({ ...current, recipients }))
+      setRecipientPage(1)
       toast.success(`Imported ${recipients.length.toLocaleString()} participant(s).`)
     } catch (error) {
       toast.error(error.message || 'Could not import the CSV file.')
@@ -238,11 +264,12 @@ export default function BulkCertificatesPage({ publicAccess = false }) {
     setFailedTotal(0)
     setFailedLoadError('')
     setSubmittedJobId(null)
+    setCertificatesExpired(false)
     finalizedJob.current = null
     setJobTitle(draft.title.trim())
     try {
-      const submitJob = publicAccess ? createPublicJob : createJob
-      const response = await submitJob({
+      const submitBatch = publicAccess ? createPublicBatch : createBatch
+      const response = await submitBatch({
         title: draft.title.trim(),
         recipients: draft.recipients.map(recipient => ({
           ...recipient,
@@ -252,11 +279,18 @@ export default function BulkCertificatesPage({ publicAccess = false }) {
           client_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
         })),
       })
-      setSubmittedJobId(response.data.job_id)
+      setSubmittedJobId(response.data.batch_id)
       if (publicAccess) {
-        navigate(`/bulk-certificates/public/${response.data.job_id}`, { replace: true })
+        navigate(`/bulk-certificates/public/${response.data.batch_id}`, { replace: true })
+      } else {
+        const basePath = window.location.pathname.startsWith('/dashboard/')
+          ? '/dashboard/bulk-certificates'
+          : '/bulk-certificates'
+        navigate(`${basePath}/${response.data.batch_id}`, { replace: true })
       }
-      toast.success(`Bulk job queued for ${response.data.valid_recipients} recipient(s).`)
+      toast.success(
+        `Bulk batch queued as ${response.data.job_count} job(s) for ${response.data.valid_recipients} valid recipient(s).`
+      )
     } catch (error) {
       toast.error(getApiErrorMessage(error, 'Could not submit the bulk certificate job.'))
     } finally {
@@ -269,6 +303,41 @@ export default function BulkCertificatesPage({ publicAccess = false }) {
   const signedIn = Boolean(token)
   const effectiveJobTitle = jobTitle || job?.title || 'certificates'
   const publicJobUrl = jobId ? `${window.location.origin}/bulk-certificates/public/${jobId}` : ''
+  const downloadCombinedPdf = async () => {
+    if (!jobId || downloadLoading) return
+    setDownloadLoading(true)
+    try {
+      const download = publicAccess ? downloadPublicBatchAll : downloadBatchAll
+      await download(jobId, effectiveJobTitle)
+      toast.success(`Combined PDF downloaded with ${job?.success_count || 0} certificate(s).`)
+    } catch (error) {
+      if (error.response?.status === 410) setCertificatesExpired(true)
+      toast.error(getApiErrorMessage(error, 'Could not download the combined PDF.'))
+    } finally {
+      setDownloadLoading(false)
+    }
+  }
+  const handleRegenerate = async () => {
+    if (!jobId || regenerating) return
+    setRegenerating(true)
+    try {
+      const regenerate = publicAccess ? regeneratePublicBatch : regenerateBatch
+      const response = await regenerate(jobId)
+      setCertificatesExpired(false)
+      finalizedJob.current = null
+      setFailedRecipients([])
+      setFailedTotal(0)
+      setFailedPage(1)
+      restartPolling()
+      toast.success(
+        `Queued ${response.data.recipients_to_regenerate.toLocaleString()} certificate(s) across ${response.data.job_count} job(s).`
+      )
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'Could not regenerate the certificates.'))
+    } finally {
+      setRegenerating(false)
+    }
+  }
 
   return (
     <main className="newsprint-page min-h-screen bg-surface px-4 py-6 text-primary sm:px-8 sm:py-8">
@@ -281,8 +350,8 @@ export default function BulkCertificatesPage({ publicAccess = false }) {
             <p className="edition-stamp mb-3">Certificate desk · Batch edition · {format(new Date(), 'dd MMM yyyy')}</p>
             <h1 className="font-display text-4xl font-black leading-[0.95] tracking-tight text-primary sm:text-6xl">Generate certificates in bulk</h1>
             <p className="mt-3 max-w-3xl font-body text-sm leading-relaxed text-secondary sm:text-base">
-              Enter the event details and add as many recipients as needed. One request queues the batch;
-              completed PDFs are packaged into a ZIP download.
+              Submit up to 100,000 participants at once. The app splits them into 10,000-person queue jobs,
+              tracks them together, and downloads successful certificates as one combined PDF.
             </p>
           </div>
           <nav className="flex flex-wrap items-center gap-3 text-sm">
@@ -302,7 +371,7 @@ export default function BulkCertificatesPage({ publicAccess = false }) {
           <div className="newsprint-ticker-track" aria-hidden="true">
             {Array.from({ length: 2 }, (_, index) => (
               <span key={index} className="newsprint-ticker-item">
-                One submission <span className="text-brand-400">◆</span> Independent recipient validation <span className="text-brand-400">◆</span> PDF certificates in a ZIP <span className="text-brand-400">◆</span>
+                One submission <span className="text-brand-400">◆</span> Independent recipient validation <span className="text-brand-400">◆</span> One merged PDF <span className="text-brand-400">◆</span>
               </span>
             ))}
           </div>
@@ -310,7 +379,7 @@ export default function BulkCertificatesPage({ publicAccess = false }) {
 
         {publicAccess && (
           <div className="mb-6 border-l-4 border-brand-500 border-y border-r border-primary bg-surface-card p-4 font-body text-sm leading-relaxed text-secondary">
-            No account is needed to submit or download. Your private job link grants access to its progress, recipient details, and certificates; keep it private.
+            No account is needed to submit or download. Your private batch link grants access to its progress, failed-recipient details, and combined PDF; keep it private.
           </div>
         )}
 
@@ -340,7 +409,7 @@ export default function BulkCertificatesPage({ publicAccess = false }) {
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-surface-border p-5">
               <div>
                 <h2 className="font-display text-lg font-semibold text-primary">Recipients</h2>
-                <p className="mt-1 text-sm text-secondary">{draft.recipients.length.toLocaleString()} row(s); maximum {MAX_RECIPIENTS.toLocaleString()} per request</p>
+                <p className="mt-1 text-sm text-secondary">{draft.recipients.length.toLocaleString()} participant(s); maximum {MAX_RECIPIENTS.toLocaleString()} per submission, processed in jobs of up to 10,000</p>
               </div>
               <div className="flex gap-2">
                 <input
@@ -375,44 +444,58 @@ export default function BulkCertificatesPage({ publicAccess = false }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {draft.recipients.map((recipient, index) => (
-                    <tr key={index} className="border-t border-surface-border align-top">
-                      <td className="px-4 py-3 text-secondary">{index + 1}</td>
-                      {[
-                        ['name', 'text', 'Full name'],
-                        ['email', 'text', 'name@example.com'],
-                        ['course_name', 'text', 'Course or program'],
-                        ['completion_date', 'date', ''],
-                      ].map(([field, type, placeholder]) => (
-                        <td key={field} className="px-2 py-3">
-                          <input
-                            inputMode={field === 'email' ? 'email' : undefined}
-                            maxLength={['name', 'email', 'course_name'].includes(field) ? 255 : undefined}
-                            type={type}
-                            value={recipient[field]}
-                            placeholder={placeholder}
-                            disabled={jobActive || busy}
-                            onChange={event => updateField(index, field, event.target.value)}
-                            aria-label={`${field.replace('_', ' ')} for recipient ${index + 1}`}
-                            className="w-full min-w-40 rounded-md border border-surface-border bg-surface px-3 py-2 text-primary focus:border-primary focus:outline-none disabled:opacity-60"
-                          />
+                  {visibleRecipients.map((recipient, rowIndex) => {
+                    const index = (recipientPage - 1) * RECIPIENT_PAGE_SIZE + rowIndex
+                    return (
+                      <tr key={index} className="border-t border-surface-border align-top">
+                        <td className="px-4 py-3 text-secondary">{index + 1}</td>
+                        {[
+                          ['name', 'text', 'Full name'],
+                          ['email', 'text', 'name@example.com'],
+                          ['course_name', 'text', 'Course or program'],
+                          ['completion_date', 'date', ''],
+                        ].map(([field, type, placeholder]) => (
+                          <td key={field} className="px-2 py-3">
+                            <input
+                              inputMode={field === 'email' ? 'email' : undefined}
+                              maxLength={['name', 'email', 'course_name'].includes(field) ? 255 : undefined}
+                              type={type}
+                              value={recipient[field]}
+                              placeholder={placeholder}
+                              disabled={jobActive || busy}
+                              onChange={event => updateField(index, field, event.target.value)}
+                              aria-label={`${field.replace('_', ' ')} for recipient ${index + 1}`}
+                              className="w-full min-w-40 rounded-md border border-surface-border bg-surface px-3 py-2 text-primary focus:border-primary focus:outline-none disabled:opacity-60"
+                            />
+                          </td>
+                        ))}
+                        <td className="px-4 py-3">
+                          <button type="button" disabled={jobActive || busy} onClick={() => removeRow(index)}
+                            className="rounded-md px-2 py-1 text-secondary hover:bg-surface-hover hover:text-primary disabled:opacity-50"
+                            aria-label={`Remove recipient ${index + 1}`}>Remove</button>
                         </td>
-                      ))}
-                      <td className="px-4 py-3">
-                        <button type="button" disabled={jobActive || busy} onClick={() => removeRow(index)}
-                          className="rounded-md px-2 py-1 text-secondary hover:bg-surface-hover hover:text-primary disabled:opacity-50"
-                          aria-label={`Remove recipient ${index + 1}`}>Remove</button>
-                      </td>
-                    </tr>
-                  ))}
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
+            {draft.recipients.length > RECIPIENT_PAGE_SIZE && (
+              <div className="flex items-center justify-center gap-3 border-t border-surface-border p-3 text-sm text-secondary">
+                <button type="button" disabled={recipientPage <= 1}
+                  onClick={() => setRecipientPage(page => page - 1)}
+                  className="btn-secondary px-3 py-2 disabled:opacity-50">Previous</button>
+                <span>Showing {(recipientPage - 1) * RECIPIENT_PAGE_SIZE + 1}–{Math.min(recipientPage * RECIPIENT_PAGE_SIZE, draft.recipients.length)} of {draft.recipients.length.toLocaleString()}</span>
+                <button type="button" disabled={recipientPage >= recipientPageCount}
+                  onClick={() => setRecipientPage(page => page + 1)}
+                  className="btn-secondary px-3 py-2 disabled:opacity-50">Next</button>
+              </div>
+            )}
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-surface-border p-5">
               <p className="text-xs text-secondary">Import replaces the current table. CSV headers: name, email, course_name, completion_date. Each participant is validated and processed independently.</p>
               <button type="submit" disabled={busy || jobActive}
                 className="btn-primary px-5 py-3 text-sm disabled:cursor-not-allowed disabled:opacity-50">
-                {busy ? 'Submitting batch…' : jobActive ? 'Batch is processing…' : 'Generate PDFs and download ZIP'}
+                {busy ? 'Submitting batch…' : jobActive ? 'Batch is processing…' : 'Generate certificates'}
               </button>
             </div>
           </section>
@@ -423,9 +506,9 @@ export default function BulkCertificatesPage({ publicAccess = false }) {
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h2 className="font-display text-lg font-semibold text-primary">Batch status: {job?.status || 'PENDING'}</h2>
-                <p className="mt-1 text-sm text-secondary">{effectiveJobTitle} · Job ID {jobId}</p>
+                <p className="mt-1 text-sm text-secondary">{effectiveJobTitle} · Batch ID {jobId}</p>
               </div>
-              {(polling || jobActive || resultLoading || failedLoading) && <span className="text-sm text-secondary">{failedLoading || resultLoading ? 'Preparing results and ZIP…' : 'Refreshing progress…'}</span>}
+              {(polling || jobActive || resultLoading || failedLoading) && <span className="text-sm text-secondary">{failedLoading || resultLoading ? 'Preparing results and combined PDF…' : 'Refreshing progress…'}</span>}
             </div>
             {publicAccess && (
               <button
@@ -488,18 +571,26 @@ export default function BulkCertificatesPage({ publicAccess = false }) {
               </div>
             )}
             {job?.success_count > 0 && !jobActive && !resultLoading && (
-              <button type="button" onClick={() => (publicAccess ? downloadPublicAll : downloadAll)(jobId, effectiveJobTitle).catch(error =>
-                toast.error(getApiErrorMessage(error, 'Could not download the ZIP.'))
-              )} className="btn-secondary mt-5 px-4 py-2 text-sm">
-                Download ZIP again
-              </button>
+              <div className="mt-5 flex flex-wrap items-center gap-3">
+                <button type="button" disabled={downloadLoading || regenerating} onClick={downloadCombinedPdf}
+                  className="btn-secondary px-4 py-2 text-sm disabled:opacity-50">
+                  {downloadLoading ? 'Preparing combined PDF…' : 'Download combined PDF'}
+                </button>
+                {certificatesExpired && (
+                  <button type="button" disabled={regenerating || downloadLoading} onClick={handleRegenerate}
+                    className="btn-primary px-4 py-2 text-sm disabled:opacity-50">
+                    {regenerating ? 'Queueing certificates…' : 'Regenerate expired PDFs'}
+                  </button>
+                )}
+                <span className="text-xs text-secondary">PDF files are automatically deleted after 10 minutes to keep storage available.</span>
+              </div>
             )}
           </section>
         )}
 
         <footer className="mt-8 text-center text-xs text-secondary">
           {publicAccess
-            ? 'No account is required. Keep your private job URL to return to these results.'
+            ? 'No account is required. Keep your private batch URL to return to these results.'
             : user ? `Signed in as ${user.email}` : 'Sign in to submit and track account-owned bulk jobs.'}
         </footer>
       </div>

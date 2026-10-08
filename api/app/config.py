@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     CELERY_TASK_ALWAYS_EAGER: bool = False
 
     STORAGE_PATH: str = "/app/storage/certificates"
+    CERTIFICATE_TTL_SECONDS: int = Field(default=600, ge=60)
+    CERTIFICATE_CLEANUP_INTERVAL_SECONDS: int = Field(default=60, ge=10)
 
     SANDBOX_THRESHOLD: int = 10
 

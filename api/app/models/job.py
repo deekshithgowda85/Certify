@@ -30,6 +30,9 @@ class Job(Base):
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    batch_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid, ForeignKey("job_batches.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     user_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid, ForeignKey("users.id"), nullable=True, index=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default=JobStatus.PENDING.value)

@@ -1,0 +1,5 @@
+name,email,course_name,completion_date
+Ada Lovelace,ada@example.com,Python Fundamentals,2026-09-15
+Grace Hopper,grace@example.com,"Advanced Python, Data Science",2026-09-20
+Alan Turing,alan@example.com,Introduction to Algorithms,2026-10-01
+Invalid Email,not-an-email,Python Fundamentals,2026-09-25

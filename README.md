@@ -15,6 +15,7 @@ Generate and retrieve personalized PDF certificates from a validated recipient l
 
 - [Overview](#overview)
 - [Architecture](#architecture)
+- [Sandbox container status](#sandbox-container-status)
 - [Technical specification](#technical-specification)
 - [Data model](#data-model)
 - [Setup](#setup)
@@ -116,6 +117,26 @@ flowchart LR
 | PDF generator | Isolated rendering for larger jobs | Docker container, ReportLab | No published port |
 
 The API and dispatcher share the certificate storage volume. The PDF generator containers also mount that volume and connect to PostgreSQL to record recipient outcomes.
+
+### Sandbox container status
+
+```mermaid
+flowchart LR
+    subgraph Pool["Sandbox pool (5 containers)"]
+        C1["Container 1\nReady\nAvailable"]
+        C2["Container 2\nBusy\nRendering"]
+        C3["Container 3\nIdle\nWaiting"]
+        C4["Container 4\nWarming\nRestarting"]
+        C5["Container 5\nOffline\nMaintenance"]
+    end
+
+    C1 --> C2
+    C2 --> C3
+    C3 --> C4
+    C4 --> C5
+```
+
+The sandbox pool keeps five isolated PDF-generation containers ready for burst work. A ready container accepts a new certificate batch, a busy container is rendering a job, and the warm-up or offline nodes are temporarily unavailable while they recover or are replaced.
 
 ### Request flow
 

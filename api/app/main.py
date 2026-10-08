@@ -49,13 +49,40 @@ async def lifespan(app: FastAPI):
     Path(settings.STORAGE_PATH).mkdir(parents=True, exist_ok=True)
     if settings.RUN_MIGRATIONS:
         await run_migrations()
+    cleanup_task = asyncio.create_task(cleanup_certificate_storage())
     try:
         yield
     finally:
+        cleanup_task.cancel()
+        try:
+            await cleanup_task
+        except asyncio.CancelledError:
+            pass
         try:
             await close_rate_limit_client()
         finally:
             await engine.dispose()
+
+
+async def cleanup_certificate_storage() -> None:
+    from app.services.certificate_storage import cleanup_expired_certificates
+
+    while True:
+        try:
+            deleted, bytes_freed = await asyncio.to_thread(
+                cleanup_expired_certificates,
+                settings.STORAGE_PATH,
+                settings.CERTIFICATE_TTL_SECONDS,
+            )
+            if deleted:
+                logger.info(
+                    "Expired %s certificate PDF(s), freeing %.2f MiB",
+                    deleted,
+                    bytes_freed / (1024 * 1024),
+                )
+        except Exception:
+            logger.exception("Could not clean expired certificate PDFs")
+        await asyncio.sleep(settings.CERTIFICATE_CLEANUP_INTERVAL_SECONDS)
 
 
 app = FastAPI(

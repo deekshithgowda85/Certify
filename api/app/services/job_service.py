@@ -97,6 +97,10 @@ async def create_job(
     user_id: Optional[uuid.UUID],
     idempotency_key: Optional[str] = None,
     fingerprint: Optional[str] = None,
+    batch_id: Optional[uuid.UUID] = None,
+    allow_all_invalid: bool = False,
+    commit: bool = True,
+    recipient_offset: int = 0,
 ) -> CreatedJob:
     if idempotency_key is not None:
         if user_id is None:
@@ -119,6 +123,7 @@ async def create_job(
             rows.append(
                 Recipient(
                     job_id=job_id,
+                    source_index=recipient_offset + index,
                     name=validated.name,
                     email=str(validated.email),
                     course_name=validated.course_name,
@@ -131,21 +136,23 @@ async def create_job(
             rows.append(
                 Recipient(
                     job_id=job_id,
+                    source_index=recipient_offset + index,
                     status=RecipientStatus.FAILED.value,
                     error_message=error,
                     **fallback_recipient_fields(raw),
                 )
             )
 
-    if valid == 0:
+    if valid == 0 and not allow_all_invalid:
         raise NoValidRecipientsError(errors)
 
     invalid = len(rows) - valid
     job = Job(
         id=job_id,
+        batch_id=batch_id,
         user_id=user_id,
         title=title,
-        status=JobStatus.PENDING.value,
+        status=JobStatus.PENDING.value if valid else JobStatus.FAILED.value,
         total_recipients=len(rows),
         processed_count=invalid,
         success_count=0,
@@ -157,6 +164,8 @@ async def create_job(
     )
     session.add(job)
     session.add_all(rows)
+    if not commit:
+        return CreatedJob(job_id=job_id, total=len(rows), valid=valid, invalid=invalid)
     try:
         await session.commit()
     except IntegrityError:
